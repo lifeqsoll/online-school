@@ -1,0 +1,243 @@
+import {
+  BadRequestException,
+  ForbiddenException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
+import {
+  StoredFileOwnerType,
+  SubmissionStatus,
+} from '@prisma/client';
+import { CourseAccessService } from '../enrollments/course-access.service';
+import { PrismaService } from '../prisma/prisma.service';
+import { AuthUser } from '../rbac/auth-user';
+import { StorageService } from '../storage/storage.service';
+import { assertPngOrPdf } from './files.mime';
+
+type OwnerContext = {
+  courseId: string;
+  ownerType: StoredFileOwnerType;
+  ownerId: string;
+  submissionUserId?: string;
+  submissionStatus?: SubmissionStatus;
+};
+
+@Injectable()
+export class FilesService {
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly access: CourseAccessService,
+    private readonly storage: StorageService,
+  ) {}
+
+  async upload(
+    actor: AuthUser,
+    ownerType: StoredFileOwnerType,
+    ownerId: string,
+    file: Express.Multer.File,
+  ) {
+    if (!file) throw new BadRequestException('file is required');
+    try {
+      assertPngOrPdf(file.mimetype || '', file.size);
+    } catch (e) {
+      throw new BadRequestException((e as Error).message);
+    }
+
+    const ctx = await this.resolveOwner(ownerType, ownerId);
+    await this.assertCanUpload(actor, ctx);
+
+    const key = this.storage.buildFileKey(
+      ctx.courseId,
+      ownerType,
+      ownerId,
+      file.originalname || 'file',
+    );
+    await this.storage.uploadObject(
+      key,
+      file.buffer,
+      file.mimetype || 'application/octet-stream',
+    );
+
+    return this.prisma.storedFile.create({
+      data: {
+        ownerType,
+        ownerId,
+        courseId: ctx.courseId,
+        uploadedById: actor.id,
+        originalName: file.originalname || 'file',
+        mimeType: file.mimetype,
+        sizeBytes: file.size,
+        storageKey: key,
+      },
+      select: {
+        id: true,
+        originalName: true,
+        mimeType: true,
+        sizeBytes: true,
+        createdAt: true,
+        ownerType: true,
+        ownerId: true,
+        courseId: true,
+      },
+    });
+  }
+
+  async list(
+    actor: AuthUser,
+    ownerType: StoredFileOwnerType,
+    ownerId: string,
+  ) {
+    const ctx = await this.resolveOwner(ownerType, ownerId);
+    await this.assertCanRead(actor, ctx);
+    return this.prisma.storedFile.findMany({
+      where: { ownerType, ownerId },
+      orderBy: { createdAt: 'asc' },
+      select: {
+        id: true,
+        originalName: true,
+        mimeType: true,
+        sizeBytes: true,
+        createdAt: true,
+      },
+    });
+  }
+
+  async download(actor: AuthUser, id: string) {
+    const row = await this.prisma.storedFile.findUnique({ where: { id } });
+    if (!row) throw new NotFoundException('File not found');
+    const ctx = await this.resolveOwner(row.ownerType, row.ownerId);
+    await this.assertCanRead(actor, ctx);
+    const url = await this.storage.getSignedGetUrl(row.storageKey);
+    return {
+      url,
+      originalName: row.originalName,
+      mimeType: row.mimeType,
+    };
+  }
+
+  async remove(actor: AuthUser, id: string) {
+    const row = await this.prisma.storedFile.findUnique({ where: { id } });
+    if (!row) throw new NotFoundException('File not found');
+    const ctx = await this.resolveOwner(row.ownerType, row.ownerId);
+    await this.assertCanDelete(actor, ctx, row.uploadedById);
+
+    await this.storage.deleteObject(row.storageKey);
+    await this.prisma.storedFile.delete({ where: { id } });
+    return { ok: true };
+  }
+
+  private async resolveOwner(
+    ownerType: StoredFileOwnerType,
+    ownerId: string,
+  ): Promise<OwnerContext> {
+    if (ownerType === StoredFileOwnerType.LESSON_MATERIAL) {
+      const lesson = await this.prisma.lesson.findUnique({
+        where: { id: ownerId },
+        include: { module: true },
+      });
+      if (!lesson) throw new NotFoundException('Lesson not found');
+      return {
+        courseId: lesson.module.courseId,
+        ownerType,
+        ownerId,
+      };
+    }
+
+    if (ownerType === StoredFileOwnerType.ASSIGNMENT_MATERIAL) {
+      const assignment = await this.prisma.assignment.findUnique({
+        where: { id: ownerId },
+      });
+      if (!assignment) throw new NotFoundException('Assignment not found');
+      return {
+        courseId: assignment.courseId,
+        ownerType,
+        ownerId,
+      };
+    }
+
+    if (ownerType === StoredFileOwnerType.SUBMISSION_ATTACHMENT) {
+      const submission = await this.prisma.submission.findUnique({
+        where: { id: ownerId },
+        include: { assignment: true },
+      });
+      if (!submission) throw new NotFoundException('Submission not found');
+      return {
+        courseId: submission.assignment.courseId,
+        ownerType,
+        ownerId,
+        submissionUserId: submission.userId,
+        submissionStatus: submission.status,
+      };
+    }
+
+    throw new BadRequestException('Invalid ownerType');
+  }
+
+  private async assertCanUpload(actor: AuthUser, ctx: OwnerContext) {
+    if (
+      ctx.ownerType === StoredFileOwnerType.LESSON_MATERIAL ||
+      ctx.ownerType === StoredFileOwnerType.ASSIGNMENT_MATERIAL
+    ) {
+      if (!(await this.access.canManageCourse(actor, ctx.courseId))) {
+        throw new ForbiddenException('Cannot manage this course');
+      }
+      return;
+    }
+
+    if (ctx.ownerType === StoredFileOwnerType.SUBMISSION_ATTACHMENT) {
+      if (ctx.submissionUserId !== actor.id) {
+        throw new ForbiddenException('Not your submission');
+      }
+      if (ctx.submissionStatus !== SubmissionStatus.IN_PROGRESS) {
+        throw new BadRequestException('Submission is not editable');
+      }
+      return;
+    }
+  }
+
+  private async assertCanRead(actor: AuthUser, ctx: OwnerContext) {
+    if (
+      ctx.ownerType === StoredFileOwnerType.LESSON_MATERIAL ||
+      ctx.ownerType === StoredFileOwnerType.ASSIGNMENT_MATERIAL
+    ) {
+      if (!(await this.access.hasContentAccess(actor, ctx.courseId))) {
+        throw new ForbiddenException('No access');
+      }
+      return;
+    }
+
+    if (ctx.ownerType === StoredFileOwnerType.SUBMISSION_ATTACHMENT) {
+      if (ctx.submissionUserId === actor.id) return;
+      if (await this.access.canManageCourse(actor, ctx.courseId)) return;
+      throw new ForbiddenException('No access');
+    }
+  }
+
+  private async assertCanDelete(
+    actor: AuthUser,
+    ctx: OwnerContext,
+    uploadedById: string,
+  ) {
+    if (
+      ctx.ownerType === StoredFileOwnerType.LESSON_MATERIAL ||
+      ctx.ownerType === StoredFileOwnerType.ASSIGNMENT_MATERIAL
+    ) {
+      if (!(await this.access.canManageCourse(actor, ctx.courseId))) {
+        throw new ForbiddenException('Cannot manage this course');
+      }
+      return;
+    }
+
+    if (ctx.ownerType === StoredFileOwnerType.SUBMISSION_ATTACHMENT) {
+      if (await this.access.canManageCourse(actor, ctx.courseId)) return;
+      if (
+        ctx.submissionUserId === actor.id &&
+        ctx.submissionStatus === SubmissionStatus.IN_PROGRESS &&
+        uploadedById === actor.id
+      ) {
+        return;
+      }
+      throw new ForbiddenException('Cannot delete this file');
+    }
+  }
+}
