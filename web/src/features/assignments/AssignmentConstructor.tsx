@@ -17,6 +17,7 @@ import {
 } from 'antd';
 import { useMemo, useState } from 'react';
 import { api } from '../../shared/api/client';
+import { FileList, FileUploadButton } from '../../shared/files/FileList';
 
 type QType = 'CHOICE' | 'SHORT' | 'OPEN';
 
@@ -47,9 +48,16 @@ export function AssignmentConstructor({
   const qc = useQueryClient();
   const list = useQuery({
     queryKey: ['assignments', courseId],
-    queryFn: () => api<Array<{ id: string; title: string; scope: string; isPublished: boolean }>>(
-      `/courses/${courseId}/assignments`,
-    ),
+    queryFn: () =>
+      api<
+        Array<{
+          id: string;
+          title: string;
+          scope: string;
+          isPublished: boolean;
+          responseMode?: string;
+        }>
+      >(`/courses/${courseId}/assignments`),
   });
 
   const [scope, setScope] = useState<'LESSON' | 'MODULE' | 'COURSE'>('LESSON');
@@ -59,6 +67,10 @@ export function AssignmentConstructor({
   const [maxXp, setMaxXp] = useState(100);
   const [maxAttempts, setMaxAttempts] = useState<number | null>(null);
   const [published, setPublished] = useState(true);
+  const [responseMode, setResponseMode] = useState<
+    'QUIZ' | 'FILE' | 'QUIZ_AND_FILE'
+  >('QUIZ');
+  const [materialsFor, setMaterialsFor] = useState<string | null>(null);
   const [questions, setQuestions] = useState<DraftQuestion[]>([
     {
       key: 'q1',
@@ -109,35 +121,43 @@ export function AssignmentConstructor({
 
   const save = async () => {
     try {
+      if (responseMode !== 'FILE' && questions.length === 0) {
+        message.error('Добавьте хотя бы один вопрос');
+        return;
+      }
       const payload: Record<string, unknown> = {
         scope,
         title,
         maxXp,
         maxAttempts,
         isPublished: published,
-        questions: questions.map((q, i) => ({
-          type: q.type,
-          prompt: q.prompt,
-          points: q.points,
-          sortOrder: i,
-          options: q.type === 'CHOICE' ? q.options : undefined,
-          correctKeys:
-            q.type === 'OPEN' ? undefined : q.correctKeys,
-          shortMatch: q.type === 'SHORT' ? q.shortMatch : undefined,
-          numberTolerance:
-            q.type === 'SHORT' && q.shortMatch === 'NUMBER'
-              ? q.numberTolerance ?? 0
-              : undefined,
-        })),
+        responseMode,
+        questions:
+          responseMode === 'FILE'
+            ? []
+            : questions.map((q, i) => ({
+                type: q.type,
+                prompt: q.prompt,
+                points: q.points,
+                sortOrder: i,
+                options: q.type === 'CHOICE' ? q.options : undefined,
+                correctKeys: q.type === 'OPEN' ? undefined : q.correctKeys,
+                shortMatch: q.type === 'SHORT' ? q.shortMatch : undefined,
+                numberTolerance:
+                  q.type === 'SHORT' && q.shortMatch === 'NUMBER'
+                    ? q.numberTolerance ?? 0
+                    : undefined,
+              })),
       };
       if (scope === 'LESSON') payload.lessonId = lessonId;
       if (scope === 'MODULE') payload.moduleId = moduleId;
 
-      await api(`/courses/${courseId}/assignments`, {
+      const created = await api<{ id: string }>(`/courses/${courseId}/assignments`, {
         method: 'POST',
         json: payload,
       });
       message.success('Задание создано');
+      setMaterialsFor(created.id);
       qc.invalidateQueries({ queryKey: ['assignments', courseId] });
     } catch (e) {
       message.error(e instanceof Error ? e.message : 'Ошибка сохранения');
@@ -222,6 +242,17 @@ export function AssignmentConstructor({
             <Form.Item label="Название задания">
               <Input value={title} onChange={(e) => setTitle(e.target.value)} />
             </Form.Item>
+            <Form.Item label="Режим ответа">
+              <Select
+                value={responseMode}
+                onChange={setResponseMode}
+                options={[
+                  { value: 'QUIZ', label: 'Квиз' },
+                  { value: 'FILE', label: 'Только файл (PNG/PDF)' },
+                  { value: 'QUIZ_AND_FILE', label: 'Квиз + файл' },
+                ]}
+              />
+            </Form.Item>
             <Space>
               <Form.Item label="Max XP">
                 <InputNumber min={0} value={maxXp} onChange={(v) => setMaxXp(v ?? 0)} />
@@ -239,7 +270,12 @@ export function AssignmentConstructor({
             </Space>
           </Form>
 
-          {current && (
+          {responseMode === 'FILE' ? (
+            <Typography.Paragraph type="secondary">
+              Вопросы не нужны — ученик сдаёт PNG/PDF. После создания добавьте бланки в
+              «Материалы задания» справа.
+            </Typography.Paragraph>
+          ) : current ? (
             <Card type="inner" title={`Вопрос · ${current.type}`}>
               <Space direction="vertical" style={{ width: '100%' }}>
                 <Input.TextArea
@@ -395,7 +431,7 @@ export function AssignmentConstructor({
                 </Button>
               </Space>
             </Card>
-          )}
+          ) : null}
 
           <Button type="primary" onClick={save}>
             Создать задание
@@ -404,8 +440,9 @@ export function AssignmentConstructor({
       </Card>
 
       <Card size="small" title="Сводка">
-        <p>Вопросов: {questions.length}</p>
-        <p>Сумма баллов: {totalPoints}</p>
+        <p>Режим: {responseMode}</p>
+        <p>Вопросов: {responseMode === 'FILE' ? 0 : questions.length}</p>
+        <p>Сумма баллов: {responseMode === 'FILE' ? 0 : totalPoints}</p>
         <p>Max XP: {maxXp}</p>
         <Divider />
         <Typography.Text strong>Уже созданные</Typography.Text>
@@ -413,12 +450,35 @@ export function AssignmentConstructor({
           size="small"
           dataSource={list.data ?? []}
           renderItem={(a) => (
-            <List.Item>
-              {a.title} · {a.scope}{' '}
+            <List.Item
+              actions={[
+                <Button
+                  key="mat"
+                  type="link"
+                  size="small"
+                  onClick={() => setMaterialsFor(a.id)}
+                >
+                  Материалы
+                </Button>,
+              ]}
+            >
+              {a.title} · {a.responseMode ?? 'QUIZ'}{' '}
               {a.isPublished ? <Typography.Text type="success">pub</Typography.Text> : null}
             </List.Item>
           )}
         />
+        {materialsFor ? (
+          <div style={{ marginTop: 12 }}>
+            <Typography.Text type="secondary">Материалы ДЗ</Typography.Text>
+            <div style={{ marginTop: 8 }}>
+              <FileUploadButton
+                ownerType="ASSIGNMENT_MATERIAL"
+                ownerId={materialsFor}
+              />
+            </div>
+            <FileList ownerType="ASSIGNMENT_MATERIAL" ownerId={materialsFor} />
+          </div>
+        ) : null}
       </Card>
     </div>
   );
