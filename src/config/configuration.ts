@@ -25,4 +25,9 @@ export default () => ({
     forcePathStyle: process.env.S3_FORCE_PATH_STYLE !== 'false',
     signedUrlTtlSec: parseInt(process.env.S3_SIGNED_URL_TTL_SEC ?? '3600', 10),
   },
+  neo4j: {
+    uri: process.env.NEO4J_URI ?? '',
+    user: process.env.NEO4J_USER ?? 'neo4j',
+    password: process.env.NEO4J_PASSWORD ?? '',
+  },
 });

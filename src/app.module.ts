@@ -24,6 +24,11 @@ import { ImpersonationModule } from './impersonation/impersonation.module';
 import { AssignmentsModule } from './assignments/assignments.module';
 import { SubmissionsModule } from './submissions/submissions.module';
 import { XpModule } from './xp/xp.module';
+import { OutboxModule } from './outbox/outbox.module';
+import { TopicsModule } from './topics/topics.module';
+import { EngagementModule } from './engagement/engagement.module';
+import { AnalyticsModule } from './analytics/analytics.module';
+import { ScheduleModule } from '@nestjs/schedule';
 import { JwtAuthGuard } from './rbac/guards/jwt-auth.guard';
 
 @Module({
@@ -33,6 +38,7 @@ import { JwtAuthGuard } from './rbac/guards/jwt-auth.guard';
       load: [configuration],
       validate: validateEnv,
     }),
+    ScheduleModule.forRoot(),
     ThrottlerModule.forRoot([
       {
         name: 'default',
@@ -62,6 +68,10 @@ import { JwtAuthGuard } from './rbac/guards/jwt-auth.guard';
     AssignmentsModule,
     SubmissionsModule,
     XpModule,
+    OutboxModule,
+    TopicsModule,
+    EngagementModule,
+    AnalyticsModule,
     ImpersonationModule,
     HealthModule,
     Neo4jModule,

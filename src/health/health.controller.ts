@@ -1,6 +1,7 @@
 import { Controller, Get } from '@nestjs/common';
 import { SkipThrottle } from '@nestjs/throttler';
 import { Public } from '../common/decorators/public.decorator';
+import { Neo4jService } from '../neo4j/neo4j.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { RedisService } from '../redis/redis.service';
 
@@ -10,6 +11,7 @@ export class HealthController {
   constructor(
     private readonly prisma: PrismaService,
     private readonly redis: RedisService,
+    private readonly neo4j: Neo4jService,
   ) {}
 
   @Public()
@@ -32,7 +34,8 @@ export class HealthController {
       redis = 'down';
     }
 
+    const neo4j = await this.neo4j.health();
     const status = postgres === 'up' && redis === 'up' ? 'ok' : 'degraded';
-    return { status, postgres, redis };
+    return { status, postgres, redis, neo4j };
   }
 }

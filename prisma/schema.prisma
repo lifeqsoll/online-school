@@ -129,6 +129,8 @@ model User {
   xpBalances          XpBalance[]
   xpLedgers           XpLedger[]
   assignmentBestXps   AssignmentBestXp[]
+  lessonEngagements   LessonEngagement[]
+  topicMasteries      TopicMastery[]
 }
 
 model EmailVerificationCode {
@@ -174,6 +176,7 @@ model Course {
   assignments Assignment[]
   xpBalances  XpBalance[]
   xpLedgers   XpLedger[]
+  topics      Topic[]
 }
 
 model CourseModule {
@@ -209,6 +212,7 @@ model Lesson {
 
   module      CourseModule @relation(fields: [moduleId], references: [id], onDelete: Cascade)
   assignments Assignment[]
+  topicLinks  LessonTopic[]
 
   @@index([moduleId, sortOrder])
 }
@@ -307,6 +311,7 @@ model Assignment {
   submissions Submission[]
   bestXps     AssignmentBestXp[]
   xpLedgers   XpLedger[]
+  topicLinks  AssignmentTopic[]
 
   @@index([courseId, sortOrder])
   @@index([lessonId])
@@ -421,4 +426,96 @@ model AssignmentBestXp {
   submission Submission? @relation(fields: [submissionId], references: [id], onDelete: SetNull)
 
   @@unique([userId, assignmentId])
+}
+
+enum OutboxStatus {
+  PENDING
+  PROCESSED
+  FAILED
+}
+
+model Topic {
+  id        String   @id @default(cuid())
+  courseId  String
+  name      String
+  slug      String
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  course           Course            @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  lessonLinks      LessonTopic[]
+  assignmentLinks  AssignmentTopic[]
+  masteries        TopicMastery[]
+
+  @@unique([courseId, slug])
+  @@index([courseId, sortOrder])
+}
+
+model LessonTopic {
+  lessonId String
+  topicId  String
+
+  lesson Lesson @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+  topic  Topic  @relation(fields: [topicId], references: [id], onDelete: Cascade)
+
+  @@id([lessonId, topicId])
+  @@index([topicId])
+}
+
+model AssignmentTopic {
+  assignmentId String
+  topicId      String
+
+  assignment Assignment @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
+  topic      Topic      @relation(fields: [topicId], references: [id], onDelete: Cascade)
+
+  @@id([assignmentId, topicId])
+  @@index([topicId])
+}
+
+model LessonEngagement {
+  id              String    @id @default(cuid())
+  userId          String
+  lessonId        String
+  courseId        String
+  viewedAt        DateTime?
+  completedAt     DateTime?
+  skippedAt       DateTime?
+  maxProgressPct  Int       @default(0)
+  updatedAt       DateTime  @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, lessonId])
+  @@index([courseId, lessonId])
+}
+
+model TopicMastery {
+  id         String   @id @default(cuid())
+  userId     String
+  courseId   String
+  topicId    String
+  scorePct   Int      @default(0)
+  struggling Boolean  @default(false)
+  updatedAt  DateTime @updatedAt
+
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  topic Topic @relation(fields: [topicId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, topicId])
+  @@index([courseId, topicId])
+}
+
+model AnalyticsOutbox {
+  id          String       @id @default(cuid())
+  type        String
+  payload     Json
+  status      OutboxStatus @default(PENDING)
+  attempts    Int          @default(0)
+  lastError   String?
+  createdAt   DateTime     @default(now())
+  processedAt DateTime?
+
+  @@index([status, createdAt])
 }

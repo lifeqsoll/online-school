@@ -20,6 +20,7 @@ import {
 import { PrismaService } from '../prisma/prisma.service';
 import { AuthUser } from '../rbac/auth-user';
 import { XpService } from '../xp/xp.service';
+import { TopicMasteryService } from '../analytics/topic-mastery.service';
 import {
   GradeSubmissionDto,
   SaveAnswersDto,
@@ -31,6 +32,7 @@ export class SubmissionsService {
     private readonly prisma: PrismaService,
     private readonly access: CourseAccessService,
     private readonly xp: XpService,
+    private readonly mastery: TopicMasteryService,
     private readonly audit: AuditService,
   ) {}
 
@@ -216,6 +218,7 @@ export class SubmissionsService {
         assignment.id,
         submissionId,
       );
+      await this.mastery.recomputeForUserAssignment(user.id, assignment.id);
     }
 
     return updated;
@@ -353,6 +356,10 @@ export class SubmissionsService {
       submission.assignment.courseId,
       submission.assignmentId,
       submissionId,
+    );
+    await this.mastery.recomputeForUserAssignment(
+      submission.userId,
+      submission.assignmentId,
     );
 
     return updated;

@@ -88,6 +88,18 @@ class EnvironmentVariables {
   @IsOptional()
   @IsString()
   S3_SIGNED_URL_TTL_SEC?: string;
+
+  @IsOptional()
+  @IsString()
+  NEO4J_URI?: string;
+
+  @IsOptional()
+  @IsString()
+  NEO4J_USER?: string;
+
+  @IsOptional()
+  @IsString()
+  NEO4J_PASSWORD?: string;
 }
 
 export function validateEnv(config: Record<string, unknown>) {
