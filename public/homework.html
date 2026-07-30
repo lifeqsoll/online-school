@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Homework Test Console</title>
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+  <header class="top">
+    <div>
+      <p class="eyebrow"><a href="/index.html" style="color:inherit">← Auth</a> · <a href="/catalog.html" style="color:inherit">Catalog</a> · Homework</p>
+      <h1>Homework / XP console</h1>
+    </div>
+    <div id="session" class="pill">no token</div>
+  </header>
+  <main class="grid">
+    <section class="panel">
+      <h2>Login</h2>
+      <form id="login">
+        <label>Email <input name="email" value="admin@online-school.local" /></label>
+        <label>Password <input name="password" type="password" value="ChangeMeAdmin123!" /></label>
+        <button type="submit">Login</button>
+      </form>
+    </section>
+    <section class="panel">
+      <h2>Create assignment (LESSON)</h2>
+      <form id="create-asg">
+        <label>Course ID <input name="courseId" id="courseId" required /></label>
+        <label>Lesson ID <input name="lessonId" id="lessonId" required /></label>
+        <label>Title <input name="title" value="Тест к уроку" /></label>
+        <label>Max XP <input name="maxXp" type="number" value="100" /></label>
+        <label><input name="isPublished" type="checkbox" checked /> Published</label>
+        <button type="submit">Create CHOICE+SHORT</button>
+      </form>
+    </section>
+    <section class="panel">
+      <h2>Submit attempt</h2>
+      <form id="submit-asg">
+        <label>Assignment ID <input name="assignmentId" id="assignmentId" required /></label>
+        <label>Choice key <input name="choice" value="a" /></label>
+        <label>Short answer <input name="short" value="42" /></label>
+        <button type="submit">Attempt + submit</button>
+      </form>
+    </section>
+    <section class="panel">
+      <h2>XP / Leaderboard</h2>
+      <button type="button" id="btn-xp">My XP</button>
+      <button type="button" id="btn-lb">Leaderboard</button>
+    </section>
+    <section class="panel">
+      <h2>Grade OPEN queue</h2>
+      <form id="grade">
+        <label>Submission ID <input name="submissionId" id="submissionId" /></label>
+        <label>OPEN question ID <input name="questionId" id="openQid" /></label>
+        <label>Points <input name="points" type="number" value="5" /></label>
+        <button type="submit">Grade</button>
+      </form>
+      <button type="button" id="btn-queue">Load PENDING_REVIEW</button>
+    </section>
+    <section class="panel wide">
+      <h2>Log</h2>
+      <pre id="log"></pre>
+    </section>
+  </main>
+  <script src="/homework.js"></script>
+</body>
+</html>

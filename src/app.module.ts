@@ -21,6 +21,9 @@ import { MailModule } from './mail/mail.module';
 import { RbacModule } from './rbac/rbac.module';
 import { UsersModule } from './users/users.module';
 import { ImpersonationModule } from './impersonation/impersonation.module';
+import { AssignmentsModule } from './assignments/assignments.module';
+import { SubmissionsModule } from './submissions/submissions.module';
+import { XpModule } from './xp/xp.module';
 import { JwtAuthGuard } from './rbac/guards/jwt-auth.guard';
 
 @Module({
@@ -56,6 +59,9 @@ import { JwtAuthGuard } from './rbac/guards/jwt-auth.guard';
     CoursesModule,
     CourseModulesModule,
     LessonsModule,
+    AssignmentsModule,
+    SubmissionsModule,
+    XpModule,
     ImpersonationModule,
     HealthModule,
     Neo4jModule,

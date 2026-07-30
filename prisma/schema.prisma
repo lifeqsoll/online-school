@@ -69,6 +69,39 @@ enum AuditAction {
   PAYMENT_SUCCEEDED
   GRANT_ENROLL
   LESSON_UPDATE
+  ASSIGNMENT_CREATE
+  ASSIGNMENT_UPDATE
+  SUBMISSION_SUBMIT
+  SUBMISSION_GRADE
+}
+
+enum AssignmentScope {
+  LESSON
+  MODULE
+  COURSE
+}
+
+enum QuestionType {
+  CHOICE
+  SHORT
+  OPEN
+}
+
+enum ShortMatch {
+  EXACT
+  NUMBER
+}
+
+enum SubmissionStatus {
+  IN_PROGRESS
+  SUBMITTED
+  AUTO_GRADED
+  PENDING_REVIEW
+  GRADED
+}
+
+enum XpReason {
+  BEST_ATTEMPT
 }
 
 model User {
@@ -91,6 +124,11 @@ model User {
   auditAsTarget       AuditLog[]              @relation("TargetLogs")
   verificationCodes   EmailVerificationCode[]
   passwordResetTokens PasswordResetToken[]
+  submissions         Submission[]
+  gradedSubmissions   Submission[]            @relation("SubmissionGrader")
+  xpBalances          XpBalance[]
+  xpLedgers           XpLedger[]
+  assignmentBestXps   AssignmentBestXp[]
 }
 
 model EmailVerificationCode {
@@ -133,6 +171,9 @@ model Course {
   memberships CourseMembership[]
   enrollments Enrollment[]
   payments    Payment[]
+  assignments Assignment[]
+  xpBalances  XpBalance[]
+  xpLedgers   XpLedger[]
 }
 
 model CourseModule {
@@ -144,8 +185,9 @@ model CourseModule {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  course  Course   @relation(fields: [courseId], references: [id], onDelete: Cascade)
-  lessons Lesson[]
+  course      Course       @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  lessons     Lesson[]
+  assignments Assignment[]
 
   @@index([courseId, sortOrder])
 }
@@ -165,7 +207,8 @@ model Lesson {
   createdAt   DateTime     @default(now())
   updatedAt   DateTime     @updatedAt
 
-  module CourseModule @relation(fields: [moduleId], references: [id], onDelete: Cascade)
+  module      CourseModule @relation(fields: [moduleId], references: [id], onDelete: Cascade)
+  assignments Assignment[]
 
   @@index([moduleId, sortOrder])
 }
@@ -239,4 +282,143 @@ model AuditLog {
 
   @@index([actorId, createdAt])
   @@index([action, createdAt])
+}
+
+model Assignment {
+  id          String          @id @default(cuid())
+  courseId    String
+  scope       AssignmentScope
+  lessonId    String?
+  moduleId    String?
+  title       String
+  description String?
+  maxXp       Int
+  maxAttempts Int?
+  isPublished Boolean         @default(false)
+  sortOrder   Int             @default(0)
+  dueAt       DateTime?
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+
+  course      Course             @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  lesson      Lesson?            @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+  module      CourseModule?      @relation(fields: [moduleId], references: [id], onDelete: Cascade)
+  questions   Question[]
+  submissions Submission[]
+  bestXps     AssignmentBestXp[]
+  xpLedgers   XpLedger[]
+
+  @@index([courseId, sortOrder])
+  @@index([lessonId])
+  @@index([moduleId])
+}
+
+model Question {
+  id              String       @id @default(cuid())
+  assignmentId    String
+  type            QuestionType
+  prompt          String
+  sortOrder       Int          @default(0)
+  points          Int          @default(1)
+  options         Json?
+  correctKeys     Json?
+  shortMatch      ShortMatch?
+  numberTolerance Decimal?     @db.Decimal(12, 6)
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+
+  assignment Assignment @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
+  answers    Answer[]
+
+  @@index([assignmentId, sortOrder])
+}
+
+model Submission {
+  id           String           @id @default(cuid())
+  assignmentId String
+  userId       String
+  attemptNo    Int
+  status       SubmissionStatus @default(IN_PROGRESS)
+  scorePoints  Int?
+  scoreXp      Int?
+  submittedAt  DateTime?
+  gradedAt     DateTime?
+  gradedBy     String?
+  createdAt    DateTime         @default(now())
+  updatedAt    DateTime         @updatedAt
+
+  assignment Assignment @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
+  user       User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  grader     User?      @relation("SubmissionGrader", fields: [gradedBy], references: [id], onDelete: SetNull)
+  answers    Answer[]
+  bestXps    AssignmentBestXp[]
+  xpLedgers  XpLedger[]
+
+  @@unique([assignmentId, userId, attemptNo])
+  @@index([assignmentId, status])
+  @@index([userId])
+}
+
+model Answer {
+  id            String   @id @default(cuid())
+  submissionId  String
+  questionId    String
+  value         Json
+  isCorrect     Boolean?
+  pointsAwarded Int?
+  feedback      String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  submission Submission @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+  question   Question   @relation(fields: [questionId], references: [id], onDelete: Cascade)
+
+  @@unique([submissionId, questionId])
+}
+
+model XpBalance {
+  id        String   @id @default(cuid())
+  userId    String
+  courseId  String
+  totalXp   Int      @default(0)
+  updatedAt DateTime @updatedAt
+
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  course Course @relation(fields: [courseId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, courseId])
+  @@index([courseId, totalXp])
+}
+
+model XpLedger {
+  id           String   @id @default(cuid())
+  userId       String
+  courseId     String
+  assignmentId String
+  submissionId String?
+  deltaXp      Int
+  reason       XpReason
+  createdAt    DateTime @default(now())
+
+  user       User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  course     Course      @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  assignment Assignment  @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
+  submission Submission? @relation(fields: [submissionId], references: [id], onDelete: SetNull)
+
+  @@index([userId, courseId, createdAt])
+  @@index([assignmentId])
+}
+
+model AssignmentBestXp {
+  id           String @id @default(cuid())
+  userId       String
+  assignmentId String
+  bestXp       Int    @default(0)
+  submissionId String?
+
+  user       User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  assignment Assignment  @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
+  submission Submission? @relation(fields: [submissionId], references: [id], onDelete: SetNull)
+
+  @@unique([userId, assignmentId])
 }
