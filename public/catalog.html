@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Catalog Test Console</title>
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+  <header class="top">
+    <div>
+      <p class="eyebrow"><a href="/index.html" style="color:inherit">← Auth</a> · Catalog</p>
+      <h1>Courses test console</h1>
+    </div>
+    <div id="session" class="pill">no token</div>
+  </header>
+  <main class="grid">
+    <section class="panel">
+      <h2>Login (reuse tokens)</h2>
+      <form id="login">
+        <label>Email <input name="email" value="admin@online-school.local" /></label>
+        <label>Password <input name="password" type="password" value="ChangeMeAdmin123!" /></label>
+        <button type="submit">Login</button>
+      </form>
+    </section>
+    <section class="panel">
+      <h2>Create course</h2>
+      <form id="create-course">
+        <label>Title <input name="title" value="Олимп. математика" required /></label>
+        <label>Price cents (0=free) <input name="priceCents" type="number" value="0" /></label>
+        <label><input name="isPublished" type="checkbox" checked /> Published</label>
+        <button type="submit">Create</button>
+      </form>
+    </section>
+    <section class="panel">
+      <h2>Module / Lesson</h2>
+      <form id="add-module">
+        <label>Course ID <input name="courseId" id="courseId" required /></label>
+        <label>Module title <input name="title" value="Модуль 1" required /></label>
+        <button type="submit">Add module</button>
+      </form>
+      <form id="add-lesson">
+        <label>Module ID <input name="moduleId" id="moduleId" required /></label>
+        <label>Lesson title <input name="title" value="Урок 1" required /></label>
+        <button type="submit">Add lesson</button>
+      </form>
+      <form id="ext-video">
+        <label>Lesson ID <input name="lessonId" id="lessonId" required /></label>
+        <label>External URL <input name="url" value="https://www.youtube.com/watch?v=dQw4w9WgXcQ" required /></label>
+        <button type="submit">Set external video</button>
+      </form>
+    </section>
+    <section class="panel">
+      <h2>Enroll / Pay</h2>
+      <button type="button" id="btn-enroll">Free enroll</button>
+      <button type="button" id="btn-checkout">Checkout</button>
+      <form id="mock-confirm">
+        <label>Payment ID <input name="paymentId" id="paymentId" /></label>
+        <button type="submit">Mock confirm</button>
+      </form>
+      <button type="button" id="btn-playback">Get playback</button>
+      <button type="button" id="btn-list">List courses</button>
+    </section>
+    <section class="panel panel-wide">
+      <h2>Response</h2>
+      <pre id="out">Ready.</pre>
+    </section>
+  </main>
+  <script src="/catalog.js"></script>
+</body>
+</html>

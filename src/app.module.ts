@@ -7,6 +7,11 @@ import { validateEnv } from './config/env.validation';
 import { CryptoModule } from './common/crypto/crypto.module';
 import { HealthModule } from './health/health.module';
 import { CoursesModule } from './courses/courses.module';
+import { CourseModulesModule } from './course-modules/course-modules.module';
+import { LessonsModule } from './lessons/lessons.module';
+import { EnrollmentsModule } from './enrollments/enrollments.module';
+import { PaymentsModule } from './payments/payments.module';
+import { StorageModule } from './storage/storage.module';
 import { Neo4jModule } from './neo4j/neo4j.module';
 import { PrismaModule } from './prisma/prisma.module';
 import { RedisModule } from './redis/redis.module';
@@ -40,14 +45,19 @@ import { JwtAuthGuard } from './rbac/guards/jwt-auth.guard';
     CryptoModule,
     PrismaModule,
     RedisModule,
+    StorageModule,
     MailModule,
     AuditModule,
     RbacModule,
     AuthModule,
     UsersModule,
+    EnrollmentsModule,
+    PaymentsModule,
+    CoursesModule,
+    CourseModulesModule,
+    LessonsModule,
     ImpersonationModule,
     HealthModule,
-    CoursesModule,
     Neo4jModule,
   ],
   providers: [

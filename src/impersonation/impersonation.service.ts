@@ -6,6 +6,7 @@ import {
 import { AuditAction, GlobalRole } from '@prisma/client';
 import { AuditService } from '../audit/audit.service';
 import { AuthService } from '../auth/auth.service';
+import { CourseAccessService } from '../enrollments/course-access.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuthUser } from '../rbac/auth-user';
 
@@ -15,16 +16,25 @@ export class ImpersonationService {
     private readonly prisma: PrismaService,
     private readonly auth: AuthService,
     private readonly audit: AuditService,
+    private readonly courseAccess: CourseAccessService,
   ) {}
 
   async start(actor: AuthUser, targetUserId: string, ip?: string, ua?: string) {
     if (actor.impersonation) {
       throw new ForbiddenException('Nested impersonation is forbidden');
     }
-    if (actor.realGlobalRole !== GlobalRole.ADMIN) {
-      throw new ForbiddenException(
-        'Impersonation is restricted to administrators in Foundation',
+
+    const isAdmin = actor.realGlobalRole === GlobalRole.ADMIN;
+    if (!isAdmin) {
+      const allowed = await this.courseAccess.curatorSharesEnrollmentWith(
+        actor.realUserId,
+        targetUserId,
       );
+      if (!allowed) {
+        throw new ForbiddenException(
+          'Curators may only impersonate students enrolled in their courses',
+        );
+      }
     }
 
     const target = await this.prisma.user.findUnique({

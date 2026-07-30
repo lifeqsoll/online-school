@@ -1,5 +1,12 @@
 import { Module } from '@nestjs/common';
+import { EnrollmentsModule } from '../enrollments/enrollments.module';
+import { CoursesController } from './courses.controller';
+import { CoursesService } from './courses.service';
 
-/** Stub until Catalog slice — models live in Prisma schema. */
-@Module({})
+@Module({
+  imports: [EnrollmentsModule],
+  controllers: [CoursesController],
+  providers: [CoursesService],
+  exports: [CoursesService],
+})
 export class CoursesModule {}
