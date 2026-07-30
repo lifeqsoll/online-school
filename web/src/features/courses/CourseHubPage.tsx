@@ -1,7 +1,9 @@
 import { useQuery } from '@tanstack/react-query';
 import { Button, Table, Typography, Empty } from 'antd';
 import { useNavigate } from 'react-router-dom';
+import { motion } from 'framer-motion';
 import { api } from '../../shared/api/client';
+import { fadeUp } from '../../shared/motion';
 
 type Course = {
   id: string;
@@ -40,7 +42,7 @@ export function CourseHubPage({
   });
 
   return (
-    <div>
+    <motion.div initial="hidden" animate="visible" variants={fadeUp}>
       <Typography.Title level={4} style={{ marginTop: 0 }}>
         {title}
       </Typography.Title>
@@ -78,6 +80,6 @@ export function CourseHubPage({
           },
         ]}
       />
-    </div>
+    </motion.div>
   );
 }

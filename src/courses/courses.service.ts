@@ -166,6 +166,29 @@ export class CoursesService {
     return course;
   }
 
+  async remove(actor: AuthUser, id: string) {
+    await this.requireManage(actor, id);
+    await this.prisma.course.delete({ where: { id } });
+    await this.audit.append({
+      action: AuditAction.COURSE_UPDATE,
+      actorId: actor.realUserId,
+      meta: { courseId: id, deleted: true },
+    });
+    return { ok: true };
+  }
+
+  async listCurators(actor: AuthUser, courseId: string) {
+    if (actor.realGlobalRole !== 'ADMIN') {
+      throw new ForbiddenException('Only admin can list curators');
+    }
+    await this.get(courseId);
+    return this.prisma.courseMembership.findMany({
+      where: { courseId, role: MembershipRole.CURATOR },
+      select: { userId: true, createdAt: true },
+      orderBy: { createdAt: 'asc' },
+    });
+  }
+
   async assignCurator(actor: AuthUser, courseId: string, userId: string) {
     if (actor.realGlobalRole !== 'ADMIN') {
       throw new ForbiddenException('Only admin can assign curators');

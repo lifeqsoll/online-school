@@ -34,18 +34,30 @@ async function bootstrap() {
     index: ['index.html'],
   });
 
-  // Explicit fallback so the test UI is easy to open
+  // Redirect API root to the React app; keep legacy test console at /console/
   const expressApp = app.getHttpAdapter().getInstance();
-  expressApp.get('/', (_req: unknown, res: { sendFile: (p: string) => void }) => {
-    res.sendFile(join(process.cwd(), 'public', 'index.html'));
+  const webOrigin =
+    (config.get<string>('corsOrigin') ?? 'http://localhost:5173')
+      .split(',')[0]
+      ?.trim() || 'http://localhost:5173';
+  expressApp.get('/', (_req: unknown, res: { redirect: (c: number, u: string) => void }) => {
+    res.redirect(302, webOrigin);
   });
+  expressApp.get(
+    '/console',
+    (_req: unknown, res: { sendFile: (p: string) => void }) => {
+      res.sendFile(join(process.cwd(), 'public', 'index.html'));
+    },
+  );
 
   const port = config.get<number>('port') ?? 3000;
   await app.listen(port);
   // eslint-disable-next-line no-console
   console.log(`API listening on http://localhost:${port}`);
   // eslint-disable-next-line no-console
-  console.log(`Test UI: http://localhost:${port}/`);
+  console.log(`App UI: ${webOrigin}`);
+  // eslint-disable-next-line no-console
+  console.log(`Test console: http://localhost:${port}/console`);
 }
 
 bootstrap();

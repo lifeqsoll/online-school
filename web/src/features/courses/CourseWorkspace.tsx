@@ -90,6 +90,26 @@ export function CourseWorkspace({
     },
   });
 
+  const removeLesson = (lessonId: string, title: string) => {
+    Modal.confirm({
+      title: 'Удалить урок?',
+      content: `«${title}» будет удалён безвозвратно.`,
+      okText: 'Удалить',
+      okType: 'danger',
+      cancelText: 'Отмена',
+      onOk: async () => {
+        try {
+          await api(`/lessons/${lessonId}`, { method: 'DELETE' });
+          message.success('Урок удалён');
+          if (editLesson?.id === lessonId) setEditLesson(null);
+          qc.invalidateQueries({ queryKey: ['course', courseId] });
+        } catch (e) {
+          message.error(e instanceof Error ? e.message : 'Ошибка');
+        }
+      },
+    });
+  };
+
   if (!course.data) return <Typography.Text>Загрузка…</Typography.Text>;
 
   const tabs = [
@@ -126,6 +146,15 @@ export function CourseWorkspace({
                         onClick={() => setEditLesson(l)}
                       >
                         Редактировать
+                      </Button>,
+                      <Button
+                        key="del"
+                        type="link"
+                        size="small"
+                        danger
+                        onClick={() => removeLesson(l.id, l.title)}
+                      >
+                        Удалить
                       </Button>,
                     ]}
                   >

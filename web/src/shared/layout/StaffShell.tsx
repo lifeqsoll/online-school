@@ -11,9 +11,10 @@ import {
   MenuFoldOutlined,
   MenuUnfoldOutlined,
 } from '@ant-design/icons';
-import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../shared/auth/AuthContext';
 import { useEffect, useState, type ReactNode } from 'react';
+import { AnimatedOutlet } from './AnimatedOutlet';
 
 const { Header, Sider, Content } = Layout;
 
@@ -141,7 +142,7 @@ export function StaffShell({
               minHeight: '70vh',
             }}
           >
-            <Outlet />
+            <AnimatedOutlet />
           </div>
         </Content>
       </Layout>

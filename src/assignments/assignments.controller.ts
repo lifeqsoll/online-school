@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   Param,
   Patch,
@@ -49,6 +50,11 @@ export class AssignmentsController {
     @Body() dto: UpdateAssignmentDto,
   ) {
     return this.assignments.update(user, id, dto);
+  }
+
+  @Delete('assignments/:id')
+  remove(@CurrentUser() user: AuthUser, @Param('id') id: string) {
+    return this.assignments.remove(user, id);
   }
 
   @Put('assignments/:id/questions')

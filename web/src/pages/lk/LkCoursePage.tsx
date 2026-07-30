@@ -4,11 +4,13 @@ import { ArrowLeftOutlined, StarFilled, ClockCircleOutlined } from '@ant-design/
 import dayjs from 'dayjs';
 import { useMemo, useState, type CSSProperties } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
+import { AnimatePresence, motion } from 'framer-motion';
 import { api } from '../../shared/api/client';
 import {
   WeekStripCalendar,
   type CalEvent,
 } from '../../features/schedule/WeekStripCalendar';
+import { easeOutExpo, tabPanelVariants } from '../../shared/motion';
 
 type CourseDetail = {
   id: string;
@@ -106,69 +108,109 @@ export function LkCoursePage() {
             style={{
               border: 'none',
               background: 'none',
-              padding: '8px 0',
+              padding: '8px 0 10px',
               cursor: 'pointer',
               fontWeight: 600,
               color: tab === t.key ? '#6b4fb8' : '#8c8c8c',
-              borderBottom: tab === t.key ? '2px solid #6b4fb8' : '2px solid transparent',
+              position: 'relative',
             }}
           >
             {t.label}
+            {tab === t.key ? (
+              <motion.span
+                layoutId="course-tab-underline"
+                style={{
+                  position: 'absolute',
+                  left: 0,
+                  right: 0,
+                  bottom: 0,
+                  height: 2,
+                  background: '#6b4fb8',
+                  borderRadius: 2,
+                }}
+                transition={{ duration: 0.28, ease: easeOutExpo }}
+              />
+            ) : null}
           </button>
         ))}
       </div>
 
-      {tab === 'lessons' ? (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-          {lessons.map((l) => (
-            <Link
-              key={l.id}
-              to={`/lk/lessons/${l.id}`}
-              style={{ textDecoration: 'none', color: 'inherit' }}
-            >
-              <div style={cardStyle}>
-                <ClockCircleOutlined style={{ color: '#69b1ff', marginTop: 4 }} />
-                <div style={{ flex: 1 }}>
-                  <div style={{ fontSize: 12, color: '#69b1ff' }}>Урок · {l.moduleTitle}</div>
-                  <div style={{ fontWeight: 600 }}>{l.title}</div>
-                </div>
-              </div>
-            </Link>
-          ))}
-          {!lessons.length ? (
-            <Typography.Text type="secondary">Уроков пока нет</Typography.Text>
-          ) : null}
-        </div>
-      ) : (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-          {(assignments.data ?? []).map((a) => (
-            <Link
-              key={a.id}
-              to={`/lk/assignments/${a.id}`}
-              style={{ textDecoration: 'none', color: 'inherit' }}
-            >
-              <div style={cardStyle}>
-                <ClockCircleOutlined style={{ color: '#69b1ff', marginTop: 4 }} />
-                <div style={{ flex: 1 }}>
-                  <div style={{ fontSize: 12, color: '#69b1ff' }}>
-                    Домашнее задание
-                    {a.dueAt
-                      ? ` · дедлайн ${dayjs(a.dueAt).format('D MMM / HH:mm')}`
-                      : ''}
-                  </div>
-                  <div style={{ fontWeight: 600 }}>{a.title}</div>
-                </div>
-                <Typography.Text>
-                  <StarFilled style={{ color: '#faad14' }} /> +{a.maxXp}
-                </Typography.Text>
-              </div>
-            </Link>
-          ))}
-          {!assignments.data?.length ? (
-            <Typography.Text type="secondary">Нет опубликованных ДЗ</Typography.Text>
-          ) : null}
-        </div>
-      )}
+      <AnimatePresence mode="wait">
+        <motion.div
+          key={tab}
+          variants={tabPanelVariants}
+          initial="initial"
+          animate="animate"
+          exit="exit"
+          transition={{ duration: 0.28, ease: easeOutExpo }}
+        >
+          {tab === 'lessons' ? (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+              {lessons.map((l, i) => (
+                <motion.div
+                  key={l.id}
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: i * 0.04, duration: 0.28, ease: easeOutExpo }}
+                >
+                  <Link
+                    to={`/lk/lessons/${l.id}`}
+                    style={{ textDecoration: 'none', color: 'inherit' }}
+                  >
+                    <motion.div whileHover={{ y: -2 }} style={cardStyle}>
+                      <ClockCircleOutlined style={{ color: '#69b1ff', marginTop: 4 }} />
+                      <div style={{ flex: 1 }}>
+                        <div style={{ fontSize: 12, color: '#69b1ff' }}>
+                          Урок · {l.moduleTitle}
+                        </div>
+                        <div style={{ fontWeight: 600 }}>{l.title}</div>
+                      </div>
+                    </motion.div>
+                  </Link>
+                </motion.div>
+              ))}
+              {!lessons.length ? (
+                <Typography.Text type="secondary">Уроков пока нет</Typography.Text>
+              ) : null}
+            </div>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+              {(assignments.data ?? []).map((a, i) => (
+                <motion.div
+                  key={a.id}
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: i * 0.04, duration: 0.28, ease: easeOutExpo }}
+                >
+                  <Link
+                    to={`/lk/assignments/${a.id}`}
+                    style={{ textDecoration: 'none', color: 'inherit' }}
+                  >
+                    <motion.div whileHover={{ y: -2 }} style={cardStyle}>
+                      <ClockCircleOutlined style={{ color: '#69b1ff', marginTop: 4 }} />
+                      <div style={{ flex: 1 }}>
+                        <div style={{ fontSize: 12, color: '#69b1ff' }}>
+                          Домашнее задание
+                          {a.dueAt
+                            ? ` · дедлайн ${dayjs(a.dueAt).format('D MMM / HH:mm')}`
+                            : ''}
+                        </div>
+                        <div style={{ fontWeight: 600 }}>{a.title}</div>
+                      </div>
+                      <Typography.Text>
+                        <StarFilled style={{ color: '#faad14' }} /> +{a.maxXp}
+                      </Typography.Text>
+                    </motion.div>
+                  </Link>
+                </motion.div>
+              ))}
+              {!assignments.data?.length ? (
+                <Typography.Text type="secondary">Нет опубликованных ДЗ</Typography.Text>
+              ) : null}
+            </div>
+          )}
+        </motion.div>
+      </AnimatePresence>
     </div>
   );
 }

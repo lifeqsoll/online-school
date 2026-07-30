@@ -32,7 +32,8 @@ type Props = {
 const WEEKDAYS = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'];
 
 function eventsOnDay(events: CalEvent[], day: Dayjs) {
-  return events.filter((e) => dayjs(e.startsAt).isSame(day, 'day'));
+  const list = Array.isArray(events) ? events : [];
+  return list.filter((e) => dayjs(e.startsAt).isSame(day, 'day'));
 }
 
 function EventChip({
@@ -187,6 +188,7 @@ const navBtn: CSSProperties = {
 };
 
 export function WeekStripCalendar({ events }: Props) {
+  const safeEvents = Array.isArray(events) ? events : [];
   const [anchor, setAnchor] = useState(() => dayjs());
   const [selected, setSelected] = useState<CalEvent | null>(null);
   const [dir, setDir] = useState(0);
@@ -253,7 +255,7 @@ export function WeekStripCalendar({ events }: Props) {
             }}
           >
             {days.map((day, i) => {
-              const dayEvents = eventsOnDay(events, day);
+              const dayEvents = eventsOnDay(safeEvents, day);
               const isToday = day.isSame(dayjs(), 'day');
               return (
                 <motion.div
@@ -289,6 +291,7 @@ export function WeekStripCalendar({ events }: Props) {
 }
 
 export function MonthGridCalendar({ events }: Props) {
+  const safeEvents = Array.isArray(events) ? events : [];
   const [anchor, setAnchor] = useState(() => dayjs());
   const [selected, setSelected] = useState<CalEvent | null>(null);
   const [dir, setDir] = useState(0);
@@ -376,7 +379,7 @@ export function MonthGridCalendar({ events }: Props) {
             {cells.map((day) => {
               const inMonth = day.month() === anchor.month();
               const isToday = day.isSame(dayjs(), 'day');
-              const dayEvents = eventsOnDay(events, day);
+              const dayEvents = eventsOnDay(safeEvents, day);
               return (
                 <div
                   key={day.format('YYYY-MM-DD')}

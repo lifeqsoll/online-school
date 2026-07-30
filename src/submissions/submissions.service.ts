@@ -64,15 +64,50 @@ export class SubmissionsService {
       where: { assignmentId, userId: user.id },
     });
 
-    return this.prisma.submission.create({
-      data: {
+    if (
+      assignment.maxAttempts != null &&
+      count >= assignment.maxAttempts
+    ) {
+      throw new BadRequestException('Max attempts reached');
+    }
+
+    const finished = await this.prisma.submission.findFirst({
+      where: {
         assignmentId,
         userId: user.id,
-        attemptNo: count + 1,
-        status: SubmissionStatus.IN_PROGRESS,
+        status: { not: SubmissionStatus.IN_PROGRESS },
       },
-      include: { answers: true },
+      orderBy: { attemptNo: 'desc' },
     });
+    // Default: one completed attempt is enough — no silent retakes
+    if (finished && (assignment.maxAttempts == null || assignment.maxAttempts <= 1)) {
+      throw new BadRequestException('Max attempts reached');
+    }
+
+    try {
+      return await this.prisma.submission.create({
+        data: {
+          assignmentId,
+          userId: user.id,
+          attemptNo: count + 1,
+          status: SubmissionStatus.IN_PROGRESS,
+        },
+        include: { answers: true },
+      });
+    } catch {
+      // Concurrent create (unique attemptNo) — reuse existing draft
+      const again = await this.prisma.submission.findFirst({
+        where: {
+          assignmentId,
+          userId: user.id,
+          status: SubmissionStatus.IN_PROGRESS,
+        },
+        include: { answers: true },
+        orderBy: { attemptNo: 'desc' },
+      });
+      if (again) return again;
+      throw new BadRequestException('Could not create attempt');
+    }
   }
 
   async saveAnswers(user: AuthUser, submissionId: string, dto: SaveAnswersDto) {
@@ -185,13 +220,20 @@ export class SubmissionsService {
 
       let result = { isCorrect: false, points: 0 };
       if (q.type === QuestionType.CHOICE) {
-        const selected = Array.isArray(ans.value)
-          ? (ans.value as string[])
-          : [String(ans.value)];
-        const keys = (q.correctKeys as string[]) ?? [];
+        const raw = ans.value;
+        const selected = Array.isArray(raw)
+          ? (raw as unknown[]).map(String)
+          : raw == null || raw === ''
+            ? []
+            : [String(raw)];
+        const keys = Array.isArray(q.correctKeys)
+          ? (q.correctKeys as string[])
+          : [];
         result = gradeChoice(keys, selected, q.points);
       } else if (q.type === QuestionType.SHORT) {
-        const keys = (q.correctKeys as string[]) ?? [];
+        const keys = Array.isArray(q.correctKeys)
+          ? (q.correctKeys as string[])
+          : [];
         const match =
           q.shortMatch === ShortMatch.NUMBER ? 'NUMBER' : 'EXACT';
         result = gradeShort({
@@ -240,6 +282,7 @@ export class SubmissionsService {
     });
 
     if (!hasOpen) {
+      // 0 XP still syncs best-attempt record, but never increments balance
       await this.xp.syncBestAttempt(
         user.id,
         assignment.courseId,

@@ -65,7 +65,6 @@ export function LkAssignmentPage() {
   const [search, setSearch] = useSearchParams();
   const nav = useNavigate();
   const qc = useQueryClient();
-  const retry = search.get('retry') === '1';
   const showResultsParam = search.get('view') === 'results';
 
   const assignment = useQuery({
@@ -83,56 +82,60 @@ export function LkAssignmentPage() {
   const [submissionId, setSubmissionId] = useState<string | null>(null);
   const [answers, setAnswers] = useState<AnswersMap>({});
   const [qIndex, setQIndex] = useState(0);
-  const [phase, setPhase] = useState<'boot' | 'take' | 'results'>('boot');
+  const [phase, setPhase] = useState<'boot' | 'take' | 'results' | 'error'>('boot');
 
   const draft = useMemo(
     () => mine.data?.find((s) => s.status === 'IN_PROGRESS'),
     [mine.data],
   );
   const latestDone = useMemo(() => {
-    const done = (mine.data ?? []).filter((s) => s.status !== 'IN_PROGRESS');
+    const done = (mine.data ?? [])
+      .filter((s) => s.status !== 'IN_PROGRESS')
+      .sort((a, b) => a.attemptNo - b.attemptNo);
     return done[done.length - 1];
   }, [mine.data]);
 
+  // Already graded/submitted → always results (ignore leftover empty drafts from old "retry")
   useEffect(() => {
+    if (assignment.isError || mine.isError) {
+      setPhase('error');
+      return;
+    }
     if (!assignment.data || mine.data === undefined) return;
-    let cancelled = false;
 
+    if (latestDone) {
+      setSubmissionId(latestDone.id);
+      setPhase('results');
+      if (!showResultsParam) {
+        setSearch({ view: 'results' }, { replace: true });
+      }
+      return;
+    }
+
+    if (draft) {
+      setSubmissionId(draft.id);
+      const map: AnswersMap = {};
+      for (const a of draft.answers) map[a.questionId] = a.value;
+      setAnswers(map);
+      setPhase('take');
+      return;
+    }
+
+    let cancelled = false;
     (async () => {
       try {
-        if (showResultsParam && latestDone && !retry) {
-          if (cancelled) return;
-          setSubmissionId(latestDone.id);
-          setPhase('results');
-          return;
-        }
-
-        if (draft && !retry) {
-          if (cancelled) return;
-          setSubmissionId(draft.id);
-          const map: AnswersMap = {};
-          for (const a of draft.answers) map[a.questionId] = a.value;
-          setAnswers(map);
-          setPhase('take');
-          return;
-        }
-
-        if (latestDone && !retry && !showResultsParam) {
-          if (cancelled) return;
-          setSubmissionId(latestDone.id);
-          setPhase('results');
-          setSearch({ view: 'results' }, { replace: true });
-          return;
-        }
-
-        // New attempt (first open or retry)
         const created = await api<Submission>(
           `/assignments/${assignmentId}/submissions`,
           { method: 'POST' },
         );
-        if (cancelled) return;
+        if (cancelled) {
+          // StrictMode/remount: let the next effect pick up the draft via refetch
+          void qc.invalidateQueries({
+            queryKey: ['submissions-me', assignmentId],
+          });
+          return;
+        }
         if (created.status !== 'IN_PROGRESS') {
-          // Safety: never edit a finished submission
           setSubmissionId(created.id);
           setPhase('results');
           setSearch({ view: 'results' }, { replace: true });
@@ -143,30 +146,51 @@ export function LkAssignmentPage() {
         for (const a of created.answers ?? []) map[a.questionId] = a.value;
         setAnswers(map);
         setPhase('take');
-        if (retry) setSearch({}, { replace: true });
+        void qc.invalidateQueries({
+          queryKey: ['submissions-me', assignmentId],
+        });
       } catch (e) {
+        if (cancelled) return;
         if (e instanceof ApiError && /max attempts|попыт/i.test(e.message)) {
-          if (latestDone) {
-            setSubmissionId(latestDone.id);
-            setPhase('results');
-            setSearch({ view: 'results' }, { replace: true });
-            message.warning('Лимит попыток исчерпан — показаны последние результаты');
-            return;
+          try {
+            const subs = await api<Submission[]>(
+              `/assignments/${assignmentId}/submissions/me`,
+            );
+            const done = (Array.isArray(subs) ? subs : [])
+              .filter((s) => s.status !== 'IN_PROGRESS')
+              .sort((a, b) => a.attemptNo - b.attemptNo);
+            const last = done[done.length - 1];
+            if (last) {
+              setSubmissionId(last.id);
+              setPhase('results');
+              setSearch({ view: 'results' }, { replace: true });
+              void qc.invalidateQueries({
+                queryKey: ['submissions-me', assignmentId],
+              });
+              return;
+            }
+          } catch {
+            /* fall through */
           }
+          message.warning('Лимит попыток исчерпан');
+          setPhase('error');
+          return;
         }
         message.error(e instanceof Error ? e.message : 'Не удалось открыть попытку');
-        setPhase('results');
+        setPhase('error');
       }
     })();
 
     return () => {
       cancelled = true;
     };
-    // Re-run when assignment/mine/retry/view change — not on every answer keystroke
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [assignment.data, mine.data, assignmentId, retry, showResultsParam]);
+  }, [assignment.data, assignment.isError, mine.data, mine.isError, assignmentId, latestDone?.id, draft?.id]);
 
   const ensureDraftId = async (): Promise<string> => {
+    if (latestDone) {
+      throw new Error('Работа уже сдана — новая попытка недоступна');
+    }
     if (submissionId && phase === 'take') {
       const current = mine.data?.find((s) => s.id === submissionId);
       if (!current || current.status === 'IN_PROGRESS') return submissionId;
@@ -177,7 +201,7 @@ export function LkAssignmentPage() {
       { method: 'POST' },
     );
     if (created.status !== 'IN_PROGRESS') {
-      throw new Error('Нет редактируемого черновика — начните новую попытку');
+      throw new Error('Нет редактируемого черновика');
     }
     setSubmissionId(created.id);
     setPhase('take');
@@ -228,15 +252,20 @@ export function LkAssignmentPage() {
     onError: (e: Error) => message.error(e.message),
   });
 
-  const startRetry = () => {
-    setAnswers({});
-    setQIndex(0);
-    setSubmissionId(null);
-    setPhase('boot');
-    setSearch({ retry: '1' });
-  };
+  if (assignment.isError || phase === 'error') {
+    return (
+      <div style={{ margin: 48 }}>
+        <Button type="link" onClick={() => nav(-1)}>
+          ← Назад
+        </Button>
+        <Typography.Paragraph type="danger">
+          Не удалось открыть задание. Попробуйте позже или вернитесь к списку ДЗ.
+        </Typography.Paragraph>
+      </div>
+    );
+  }
 
-  if (!assignment.data || phase === 'boot') {
+  if (!assignment.data || phase === 'boot' || mine.isLoading) {
     return <Spin style={{ margin: 48 }} />;
   }
 
@@ -328,10 +357,6 @@ export function LkAssignmentPage() {
             </div>
           );
         })}
-
-        <Button type="primary" style={{ marginTop: 24 }} onClick={startRetry}>
-          Пройти снова
-        </Button>
       </div>
     );
   }
@@ -465,14 +490,6 @@ export function LkAssignmentPage() {
         <Button type="primary" loading={submit.isPending} onClick={() => submit.mutate()}>
           Сдать работу
         </Button>
-        {latestDone ? (
-          <Button type="link" onClick={() => {
-            setPhase('results');
-            setSearch({ view: 'results' });
-          }}>
-            Результаты
-          </Button>
-        ) : null}
       </Space>
       <Typography.Paragraph type="secondary" style={{ marginTop: 12 }}>
         «Сохранить» пишет черновик на сервер — после выхода ответы останутся.

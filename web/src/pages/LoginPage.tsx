@@ -1,8 +1,10 @@
 import { Button, Card, Form, Input, Typography, message } from 'antd';
 import { Link, useNavigate } from 'react-router-dom';
+import { motion } from 'framer-motion';
 import { useAuth } from '../shared/auth/AuthContext';
 import { api, ApiError } from '../shared/api/client';
 import { resolvePostLoginPath } from '../shared/auth/postLoginPath';
+import { easeOutExpo } from '../shared/motion';
 
 export function LoginPage() {
   const { login } = useAuth();
@@ -10,6 +12,11 @@ export function LoginPage() {
 
   return (
     <div className="min-h-full flex items-center justify-center bg-[var(--surface)] p-6">
+      <motion.div
+        initial={{ opacity: 0, y: 20, scale: 0.98 }}
+        animate={{ opacity: 1, y: 0, scale: 1 }}
+        transition={{ duration: 0.45, ease: easeOutExpo }}
+      >
       <Card style={{ width: 420, borderRadius: 8 }}>
         <Typography.Title level={3} style={{ marginTop: 0 }}>
           Олимпиадная школа
@@ -66,6 +73,7 @@ export function LoginPage() {
           <Link to="/catalog">Каталог</Link>
         </Typography.Paragraph>
       </Card>
+      </motion.div>
     </div>
   );
 }

@@ -1,4 +1,4 @@
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Button, Space, Table, Tag, Typography, Modal, Form, Input, InputNumber, Switch, message } from 'antd';
 import { Link, useNavigate } from 'react-router-dom';
 import { useState } from 'react';
@@ -20,12 +20,33 @@ export function CoursesPage({
   managedOnly?: boolean;
 }) {
   const nav = useNavigate();
+  const qc = useQueryClient();
   const [open, setOpen] = useState(false);
   const q = useQuery({
     queryKey: ['courses', managedOnly ? 'managed' : 'all'],
     queryFn: () =>
       api<Course[]>(managedOnly ? '/courses?managedOnly=true' : '/courses'),
   });
+
+  const removeCourse = (id: string, title: string) => {
+    Modal.confirm({
+      title: 'Удалить курс?',
+      content: `«${title}» и все связанные модули, уроки, ДЗ и файлы будут удалены безвозвратно.`,
+      okText: 'Удалить',
+      okType: 'danger',
+      cancelText: 'Отмена',
+      onOk: async () => {
+        try {
+          await api(`/courses/${id}`, { method: 'DELETE' });
+          message.success('Курс удалён');
+          await q.refetch();
+          qc.invalidateQueries({ queryKey: ['courses'] });
+        } catch (e) {
+          message.error(e instanceof Error ? e.message : 'Ошибка');
+        }
+      },
+    });
+  };
 
   return (
     <div>
@@ -59,9 +80,18 @@ export function CoursesPage({
           {
             title: '',
             render: (_, r) => (
-              <Button type="link" onClick={() => nav(`${base}/courses/${r.id}`)}>
-                Открыть
-              </Button>
+              <Space>
+                <Button type="link" onClick={() => nav(`${base}/courses/${r.id}`)}>
+                  Открыть
+                </Button>
+                <Button
+                  type="link"
+                  danger
+                  onClick={() => removeCourse(r.id, r.title)}
+                >
+                  Удалить
+                </Button>
+              </Space>
             ),
           },
         ]}

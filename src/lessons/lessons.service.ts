@@ -65,6 +65,18 @@ export class LessonsService {
     return updated;
   }
 
+  async remove(actor: AuthUser, id: string) {
+    const lesson = await this.getLessonWithCourse(id);
+    await this.requireManage(actor, lesson.module.courseId);
+    await this.prisma.lesson.delete({ where: { id } });
+    await this.audit.append({
+      action: AuditAction.LESSON_UPDATE,
+      actorId: actor.realUserId,
+      meta: { lessonId: id, deleted: true },
+    });
+    return { ok: true };
+  }
+
   async setExternalVideo(actor: AuthUser, id: string, dto: ExternalVideoDto) {
     const lesson = await this.getLessonWithCourse(id);
     await this.requireManage(actor, lesson.module.courseId);

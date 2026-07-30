@@ -5,8 +5,10 @@ export function gradeChoice(
   selected: string[],
   points: number,
 ): GradeResult {
-  const a = new Set(correctKeys.map(String));
-  const b = new Set(selected.map(String));
+  const a = new Set((correctKeys ?? []).map(String).filter((k) => k.length > 0));
+  const b = new Set((selected ?? []).map(String).filter((k) => k.length > 0));
+  // Misconfigured question or empty answer must never grant points
+  if (a.size === 0 || b.size === 0) return { isCorrect: false, points: 0 };
   if (a.size !== b.size) return { isCorrect: false, points: 0 };
   for (const k of a) {
     if (!b.has(k)) return { isCorrect: false, points: 0 };
@@ -49,6 +51,6 @@ export function computeScoreXp(
   earnedPoints: number,
   totalPoints: number,
 ): number {
-  if (totalPoints <= 0 || maxXp <= 0) return 0;
+  if (totalPoints <= 0 || maxXp <= 0 || earnedPoints <= 0) return 0;
   return Math.round((maxXp * earnedPoints) / totalPoints);
 }

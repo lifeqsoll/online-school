@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Button, Form, Input, Table, message } from 'antd';
+import { Button, Form, Input, Table, Tag, message } from 'antd';
 import { api } from '../../shared/api/client';
 
 export function AssignCurators({ courseId }: { courseId: string }) {
@@ -10,6 +10,14 @@ export function AssignCurators({ courseId }: { courseId: string }) {
       api<Array<{ id: string; email?: string; globalRole: string }>>('/admin/users'),
   });
 
+  const curators = useQuery({
+    queryKey: ['course-curators', courseId],
+    queryFn: () =>
+      api<Array<{ userId: string }>>(`/courses/${courseId}/curators`),
+  });
+
+  const curatorIds = new Set((curators.data ?? []).map((c) => c.userId));
+
   const assign = useMutation({
     mutationFn: (userId: string) =>
       api(`/courses/${courseId}/curators`, {
@@ -19,6 +27,7 @@ export function AssignCurators({ courseId }: { courseId: string }) {
     onSuccess: () => {
       message.success('Куратор назначен');
       qc.invalidateQueries({ queryKey: ['course', courseId] });
+      qc.invalidateQueries({ queryKey: ['course-curators', courseId] });
     },
   });
 
@@ -29,6 +38,10 @@ export function AssignCurators({ courseId }: { courseId: string }) {
         style={{ marginBottom: 16 }}
         onFinish={async (v) => {
           try {
+            if (curatorIds.has(v.userId)) {
+              message.info('Этот пользователь уже куратор курса');
+              return;
+            }
             await assign.mutateAsync(v.userId);
           } catch (e) {
             message.error(e instanceof Error ? e.message : 'Ошибка');
@@ -44,6 +57,7 @@ export function AssignCurators({ courseId }: { courseId: string }) {
       </Form>
       <Table
         rowKey="id"
+        loading={users.isLoading || curators.isLoading}
         dataSource={users.data ?? []}
         columns={[
           { title: 'Email', dataIndex: 'email' },
@@ -51,11 +65,19 @@ export function AssignCurators({ courseId }: { courseId: string }) {
           { title: 'ID', dataIndex: 'id' },
           {
             title: '',
-            render: (_, r) => (
-              <Button size="small" onClick={() => assign.mutate(r.id)}>
-                Сделать куратором курса
-              </Button>
-            ),
+            width: 200,
+            render: (_, r) =>
+              curatorIds.has(r.id) ? (
+                <Tag color="purple">Куратор курса</Tag>
+              ) : (
+                <Button
+                  size="small"
+                  loading={assign.isPending}
+                  onClick={() => assign.mutate(r.id)}
+                >
+                  Сделать куратором курса
+                </Button>
+              ),
           },
         ]}
       />

@@ -9,6 +9,7 @@ import {
   Typography,
   Upload,
   message,
+  Modal,
 } from 'antd';
 import { api, getAccessToken } from '../../shared/api/client';
 import { FileList, FileUploadButton } from '../../shared/files/FileList';
@@ -157,6 +158,30 @@ export function LessonEditPanel({
             Сохранить
           </Button>
           <Button onClick={onClose}>Закрыть</Button>
+          <Button
+            danger
+            onClick={() => {
+              Modal.confirm({
+                title: 'Удалить урок?',
+                content: `«${lesson.title}» будет удалён безвозвратно.`,
+                okText: 'Удалить',
+                okType: 'danger',
+                cancelText: 'Отмена',
+                onOk: async () => {
+                  try {
+                    await api(`/lessons/${lesson.id}`, { method: 'DELETE' });
+                    message.success('Урок удалён');
+                    qc.invalidateQueries({ queryKey: ['course'] });
+                    onClose();
+                  } catch (e) {
+                    message.error(e instanceof Error ? e.message : 'Ошибка');
+                  }
+                },
+              });
+            }}
+          >
+            Удалить урок
+          </Button>
         </Space>
       </Form>
     </div>

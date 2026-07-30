@@ -21,6 +21,8 @@ import { LkCoursePage } from './pages/lk/LkCoursePage';
 import { LkLessonPage } from './pages/lk/LkLessonPage';
 import { LkAssignmentPage } from './pages/lk/LkAssignmentPage';
 import { LkHomeworkPage } from './pages/lk/LkHomeworkPage';
+import { LkKnowledgePage } from './pages/lk/LkKnowledgePage';
+import { LkStatsPage } from './pages/lk/LkStatsPage';
 import type { ReactNode } from 'react';
 
 const qc = new QueryClient();
@@ -82,6 +84,8 @@ function AppRoutes() {
         <Route path="lessons/:lessonId" element={<LkLessonPage />} />
         <Route path="assignments/:assignmentId" element={<LkAssignmentPage />} />
         <Route path="homework" element={<LkHomeworkPage />} />
+        <Route path="knowledge" element={<LkKnowledgePage />} />
+        <Route path="stats" element={<LkStatsPage />} />
       </Route>
 
       <Route

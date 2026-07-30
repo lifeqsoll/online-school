@@ -11,6 +11,12 @@ describe('gradeChoice', () => {
   it('fails on partial multi', () => {
     expect(gradeChoice(['a', 'c'], ['a'], 5).isCorrect).toBe(false);
   });
+
+  it('never awards points when correct keys or selection empty', () => {
+    expect(gradeChoice([], [], 5)).toEqual({ isCorrect: false, points: 0 });
+    expect(gradeChoice(['a'], [], 5)).toEqual({ isCorrect: false, points: 0 });
+    expect(gradeChoice([], ['a'], 5)).toEqual({ isCorrect: false, points: 0 });
+  });
 });
 
 describe('gradeShort', () => {
@@ -54,5 +60,9 @@ describe('computeScoreXp', () => {
 
   it('returns 0 when total is 0', () => {
     expect(computeScoreXp(100, 0, 0)).toBe(0);
+  });
+
+  it('returns 0 when nothing earned', () => {
+    expect(computeScoreXp(100, 0, 15)).toBe(0);
   });
 });

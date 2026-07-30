@@ -43,7 +43,9 @@ export function FileList({
 
   if (!q.data?.length) {
     return (
-      <Typography.Text type="secondary">Файлов пока нет</Typography.Text>
+      <div>
+        <Typography.Text type="secondary">Файлов пока нет</Typography.Text>
+      </div>
     );
   }
 

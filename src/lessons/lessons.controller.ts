@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   Param,
   Patch,
@@ -39,6 +40,11 @@ export class LessonsController {
     @Body(SanitizePipe) dto: UpdateLessonDto,
   ) {
     return this.lessons.update(user, id, dto);
+  }
+
+  @Delete('lessons/:id')
+  remove(@CurrentUser() user: AuthUser, @Param('id') id: string) {
+    return this.lessons.remove(user, id);
   }
 
   @Patch('lessons/:id/video/external')

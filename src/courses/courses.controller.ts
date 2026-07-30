@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   Param,
   Patch,
@@ -57,6 +58,16 @@ export class CoursesController {
     @Body(SanitizePipe) dto: UpdateCourseDto,
   ) {
     return this.courses.update(user, id, dto);
+  }
+
+  @Delete(':id')
+  remove(@CurrentUser() user: AuthUser, @Param('id') id: string) {
+    return this.courses.remove(user, id);
+  }
+
+  @Get(':id/curators')
+  listCurators(@CurrentUser() user: AuthUser, @Param('id') id: string) {
+    return this.courses.listCurators(user, id);
   }
 
   @Post(':id/curators')

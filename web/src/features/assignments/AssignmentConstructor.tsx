@@ -14,6 +14,7 @@ import {
   message,
   Divider,
   Switch,
+  Modal,
 } from 'antd';
 import { useMemo, useState } from 'react';
 import { api } from '../../shared/api/client';
@@ -459,6 +460,39 @@ export function AssignmentConstructor({
                   onClick={() => setMaterialsFor(a.id)}
                 >
                   Материалы
+                </Button>,
+                <Button
+                  key="del"
+                  type="link"
+                  size="small"
+                  danger
+                  onClick={() => {
+                    Modal.confirm({
+                      title: 'Удалить задание?',
+                      content: `«${a.title}» и все сдачи будут удалены.`,
+                      okText: 'Удалить',
+                      okType: 'danger',
+                      cancelText: 'Отмена',
+                      onOk: async () => {
+                        try {
+                          await api(`/assignments/${a.id}`, {
+                            method: 'DELETE',
+                          });
+                          message.success('Задание удалено');
+                          if (materialsFor === a.id) setMaterialsFor(null);
+                          qc.invalidateQueries({
+                            queryKey: ['assignments', courseId],
+                          });
+                        } catch (e) {
+                          message.error(
+                            e instanceof Error ? e.message : 'Ошибка',
+                          );
+                        }
+                      },
+                    });
+                  }}
+                >
+                  Удалить
                 </Button>,
               ]}
             >

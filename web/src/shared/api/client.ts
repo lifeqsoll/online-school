@@ -99,12 +99,20 @@ export async function api<T = unknown>(path: string, opts: Opts = {}): Promise<T
   }
 
   const text = await res.text();
+  const contentType = res.headers.get('content-type') ?? '';
+  if (contentType.includes('text/html') || /^\s*</.test(text)) {
+    throw new ApiError(
+      'API недоступен (прокси /api). Проверьте, что Nest запущен на :3000 и Vite перезапущен.',
+      res.status || 502,
+    );
+  }
+
   let data: unknown = null;
   if (text) {
     try {
       data = JSON.parse(text);
     } catch {
-      data = text;
+      throw new ApiError('Ответ API не JSON', res.status || 502);
     }
   }
   if (!res.ok) {

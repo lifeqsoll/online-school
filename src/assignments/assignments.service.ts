@@ -127,6 +127,19 @@ export class AssignmentsService {
     return this.present(assignment, true);
   }
 
+  async remove(actor: AuthUser, id: string) {
+    const existing = await this.prisma.assignment.findUnique({ where: { id } });
+    if (!existing) throw new NotFoundException('Assignment not found');
+    await this.requireManage(actor, existing.courseId);
+    await this.prisma.assignment.delete({ where: { id } });
+    await this.audit.append({
+      actorId: actor.realUserId,
+      action: AuditAction.ASSIGNMENT_UPDATE,
+      meta: { assignmentId: id, deleted: true },
+    });
+    return { ok: true };
+  }
+
   async replaceQuestions(
     actor: AuthUser,
     id: string,
