@@ -18,8 +18,9 @@ export class CoursesService {
     private readonly audit: AuditService,
   ) {}
 
-  async list(user?: AuthUser) {
+  async list(user?: AuthUser, opts?: { managedOnly?: boolean }) {
     if (!user) {
+      if (opts?.managedOnly) return [];
       return this.prisma.course.findMany({
         where: { isPublished: true },
         orderBy: { createdAt: 'desc' },
@@ -29,10 +30,16 @@ export class CoursesService {
       return this.prisma.course.findMany({ orderBy: { createdAt: 'desc' } });
     }
     const memberships = await this.prisma.courseMembership.findMany({
-      where: { userId: user.id },
+      where: { userId: user.id, role: MembershipRole.CURATOR },
       select: { courseId: true },
     });
     const managedIds = memberships.map((m) => m.courseId);
+    if (opts?.managedOnly) {
+      return this.prisma.course.findMany({
+        where: { id: { in: managedIds } },
+        orderBy: { createdAt: 'desc' },
+      });
+    }
     return this.prisma.course.findMany({
       where: {
         OR: [{ isPublished: true }, { id: { in: managedIds } }],
@@ -57,6 +64,37 @@ export class CoursesService {
     });
     if (!course) throw new NotFoundException('Course not found');
     return course;
+  }
+
+  async getForViewer(user: AuthUser | undefined, idOrSlug: string) {
+    const course = await this.get(idOrSlug);
+    const canManage =
+      !!user && (await this.access.canManageCourse(user, course.id));
+
+    if (!course.isPublished && !canManage) {
+      throw new NotFoundException('Course not found');
+    }
+
+    if (canManage) return course;
+
+    return {
+      ...course,
+      modules: course.modules.map((m) => ({
+        id: m.id,
+        title: m.title,
+        description: m.description,
+        sortOrder: m.sortOrder,
+        lessons: m.lessons
+          .filter((l) => l.isPublished)
+          .map((l) => ({
+            id: l.id,
+            title: l.title,
+            type: l.type,
+            sortOrder: l.sortOrder,
+            isPublished: l.isPublished,
+          })),
+      })),
+    };
   }
 
   async create(actor: AuthUser, dto: CreateCourseDto) {

@@ -5,8 +5,10 @@ import {
   Param,
   Patch,
   Post,
+  Query,
 } from '@nestjs/common';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
+import { Public } from '../common/decorators/public.decorator';
 import { SanitizePipe } from '../common/pipes/sanitize.pipe';
 import { AuthUser } from '../rbac/auth-user';
 import { CoursesService } from './courses.service';
@@ -20,14 +22,24 @@ import {
 export class CoursesController {
   constructor(private readonly courses: CoursesService) {}
 
+  @Public()
   @Get()
-  list(@CurrentUser() user: AuthUser) {
-    return this.courses.list(user);
+  list(
+    @CurrentUser() user: AuthUser | undefined,
+    @Query('managedOnly') managedOnly?: string,
+  ) {
+    return this.courses.list(user, {
+      managedOnly: managedOnly === '1' || managedOnly === 'true',
+    });
   }
 
+  @Public()
   @Get(':idOrSlug')
-  get(@Param('idOrSlug') idOrSlug: string) {
-    return this.courses.get(idOrSlug);
+  get(
+    @CurrentUser() user: AuthUser | undefined,
+    @Param('idOrSlug') idOrSlug: string,
+  ) {
+    return this.courses.getForViewer(user, idOrSlug);
   }
 
   @Post()
