@@ -12,6 +12,7 @@ import { ArrowLeftOutlined, StarFilled, ClockCircleOutlined } from '@ant-design/
 import { useEffect, useMemo, useState, type CSSProperties } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { api, ApiError } from '../../shared/api/client';
+import { FileList, FileUploadButton } from '../../shared/files/FileList';
 
 type Question = {
   id: string;
@@ -28,6 +29,7 @@ type Assignment = {
   maxXp: number;
   maxAttempts?: number | null;
   description?: string | null;
+  responseMode?: 'QUIZ' | 'FILE' | 'QUIZ_AND_FILE';
   questions: Question[];
 };
 
@@ -242,6 +244,9 @@ export function LkAssignmentPage() {
     ...q,
     options: normalizeOptions(q.options),
   }));
+  const mode = assignment.data.responseMode ?? 'QUIZ';
+  const needsFile = mode === 'FILE' || mode === 'QUIZ_AND_FILE';
+  const showQuiz = mode === 'QUIZ' || mode === 'QUIZ_AND_FILE';
   const current = questions[qIndex];
   const resultSub =
     phase === 'results'
@@ -346,6 +351,32 @@ export function LkAssignmentPage() {
         </Typography.Title>
       </div>
 
+      <div style={{ marginBottom: 20 }}>
+        <Typography.Title level={5} style={{ marginTop: 0 }}>
+          Материалы задания
+        </Typography.Title>
+        <FileList
+          ownerType="ASSIGNMENT_MATERIAL"
+          ownerId={assignment.data.id}
+          canDelete={false}
+        />
+      </div>
+
+      {needsFile && submissionId ? (
+        <div style={{ marginBottom: 20 }}>
+          <Typography.Title level={5}>Ваш файл ответа (PNG/PDF)</Typography.Title>
+          <FileUploadButton
+            ownerType="SUBMISSION_ATTACHMENT"
+            ownerId={submissionId}
+            label="Прикрепить файл"
+          />
+          <div style={{ marginTop: 8 }}>
+            <FileList ownerType="SUBMISSION_ATTACHMENT" ownerId={submissionId} />
+          </div>
+        </div>
+      ) : null}
+
+      {showQuiz && questions.length > 0 ? (
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 20 }}>
         {questions.map((q, i) => (
           <button
@@ -367,8 +398,9 @@ export function LkAssignmentPage() {
           </button>
         ))}
       </div>
+      ) : null}
 
-      {current ? (
+      {showQuiz && current ? (
         <div style={card}>
           <Typography.Text type="secondary">
             Вопрос №{qIndex + 1} · {current.points} б.
@@ -407,16 +439,26 @@ export function LkAssignmentPage() {
         </div>
       ) : null}
 
+      {mode === 'FILE' ? (
+        <Typography.Paragraph type="secondary">
+          Прикрепите файл выше и нажмите «Сдать».
+        </Typography.Paragraph>
+      ) : null}
+
       <Space style={{ marginTop: 20 }} wrap>
-        <Button disabled={qIndex === 0} onClick={() => setQIndex((i) => i - 1)}>
-          Назад
-        </Button>
-        <Button
-          disabled={qIndex >= questions.length - 1}
-          onClick={() => setQIndex((i) => i + 1)}
-        >
-          Далее
-        </Button>
+        {showQuiz ? (
+          <>
+            <Button disabled={qIndex === 0} onClick={() => setQIndex((i) => i - 1)}>
+              Назад
+            </Button>
+            <Button
+              disabled={qIndex >= questions.length - 1}
+              onClick={() => setQIndex((i) => i + 1)}
+            >
+              Далее
+            </Button>
+          </>
+        ) : null}
         <Button loading={save.isPending} onClick={() => save.mutate()}>
           Сохранить
         </Button>

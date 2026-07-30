@@ -3,6 +3,7 @@ import { Typography, message } from 'antd';
 import { useEffect } from 'react';
 import { useParams } from 'react-router-dom';
 import { api, ApiError } from '../../shared/api/client';
+import { FileList } from '../../shared/files/FileList';
 
 type CourseDetail = {
   modules: Array<{
@@ -27,7 +28,6 @@ export function LkLessonPage() {
   const courseHint = useQuery({
     queryKey: ['lesson-meta', lessonId],
     queryFn: async () => {
-      // Find lesson via enrollments → courses (simple path: try playback + search enrollments)
       const enrollments = await api<Array<{ courseId: string }>>('/me/enrollments');
       for (const e of enrollments) {
         const c = await api<CourseDetail>(`/courses/${e.courseId}`);
@@ -81,6 +81,17 @@ export function LkLessonPage() {
         )
       ) : playback.isError && !lesson?.content ? (
         <Typography.Text type="secondary">Видео недоступно или урок текстовый</Typography.Text>
+      ) : null}
+
+      {lessonId ? (
+        <div style={{ marginTop: 24 }}>
+          <Typography.Title level={5}>Материалы</Typography.Title>
+          <FileList
+            ownerType="LESSON_MATERIAL"
+            ownerId={lessonId}
+            canDelete={false}
+          />
+        </div>
       ) : null}
     </div>
   );
