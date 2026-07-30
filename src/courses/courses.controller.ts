@@ -5,10 +5,8 @@ import {
   Param,
   Patch,
   Post,
-  Req,
 } from '@nestjs/common';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
-import { Public } from '../common/decorators/public.decorator';
 import { SanitizePipe } from '../common/pipes/sanitize.pipe';
 import { AuthUser } from '../rbac/auth-user';
 import { CoursesService } from './courses.service';
@@ -22,10 +20,9 @@ import {
 export class CoursesController {
   constructor(private readonly courses: CoursesService) {}
 
-  @Public()
   @Get()
-  list(@Req() req: { user?: AuthUser }) {
-    return this.courses.list(req.user);
+  list(@CurrentUser() user: AuthUser) {
+    return this.courses.list(user);
   }
 
   @Get(':idOrSlug')

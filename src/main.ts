@@ -16,8 +16,10 @@ async function bootstrap() {
       contentSecurityPolicy: false,
     }),
   );
+  const corsRaw = config.get<string>('corsOrigin') ?? 'http://localhost:5173';
+  const corsOrigins = corsRaw.split(',').map((s) => s.trim()).filter(Boolean);
   app.enableCors({
-    origin: config.get<string>('corsOrigin'),
+    origin: corsOrigins.length <= 1 ? corsOrigins[0] : corsOrigins,
     credentials: true,
   });
   app.useGlobalPipes(
