@@ -14,6 +14,11 @@ type AuthState = {
   user: AuthUser | null;
   loading: boolean;
   login: (email: string, password: string) => Promise<AuthUser>;
+  register: (
+    email: string,
+    password: string,
+    firstName?: string,
+  ) => Promise<AuthUser>;
   logout: () => Promise<void>;
   refreshMe: () => Promise<void>;
 };
@@ -54,6 +59,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }>('/auth/login', {
           method: 'POST',
           json: { email, password },
+          auth: false,
+        });
+        setTokens(data.accessToken, data.refreshToken);
+        setUser(data.user);
+        return data.user;
+      },
+      async register(email, password, firstName) {
+        const data = await api<{
+          accessToken: string;
+          refreshToken: string;
+          user: AuthUser;
+        }>('/auth/register', {
+          method: 'POST',
+          json: { email, password, firstName },
           auth: false,
         });
         setTokens(data.accessToken, data.refreshToken);
