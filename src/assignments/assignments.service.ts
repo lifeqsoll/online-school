@@ -47,6 +47,7 @@ export class AssignmentsService {
         isPublished: dto.isPublished ?? false,
         sortOrder: dto.sortOrder ?? 0,
         dueAt: dto.dueAt ? new Date(dto.dueAt) : undefined,
+        responseMode: dto.responseMode ?? undefined,
         questions: dto.questions?.length
           ? { create: dto.questions.map((q, i) => this.questionData(q, i)) }
           : undefined,
@@ -112,6 +113,7 @@ export class AssignmentsService {
             : dto.dueAt
               ? new Date(dto.dueAt)
               : undefined,
+        responseMode: dto.responseMode,
       },
       include: { questions: { orderBy: { sortOrder: 'asc' } } },
     });

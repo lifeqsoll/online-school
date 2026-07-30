@@ -6,8 +6,10 @@ import {
 } from '@nestjs/common';
 import {
   AuditAction,
+  AssignmentResponseMode,
   QuestionType,
   ShortMatch,
+  StoredFileOwnerType,
   SubmissionStatus,
 } from '@prisma/client';
 import { AuditService } from '../audit/audit.service';
@@ -47,15 +49,20 @@ export class SubmissionsService {
       throw new ForbiddenException();
     }
 
+    const draft = await this.prisma.submission.findFirst({
+      where: {
+        assignmentId,
+        userId: user.id,
+        status: SubmissionStatus.IN_PROGRESS,
+      },
+      include: { answers: true },
+      orderBy: { attemptNo: 'desc' },
+    });
+    if (draft) return draft;
+
     const count = await this.prisma.submission.count({
       where: { assignmentId, userId: user.id },
     });
-    if (
-      assignment.maxAttempts != null &&
-      count >= assignment.maxAttempts
-    ) {
-      throw new BadRequestException('Max attempts reached');
-    }
 
     return this.prisma.submission.create({
       data: {
@@ -119,6 +126,25 @@ export class SubmissionsService {
       where: { id: submission.assignmentId },
       include: { questions: true },
     });
+
+    const mode = assignment.responseMode;
+    const needsFile =
+      mode === AssignmentResponseMode.FILE ||
+      mode === AssignmentResponseMode.QUIZ_AND_FILE;
+    if (needsFile) {
+      const fileCount = await this.prisma.storedFile.count({
+        where: {
+          ownerType: StoredFileOwnerType.SUBMISSION_ATTACHMENT,
+          ownerId: submissionId,
+        },
+      });
+      if (fileCount < 1) {
+        throw new BadRequestException(
+          'At least one PNG/PDF attachment is required',
+        );
+      }
+    }
+
     const answers = await this.prisma.answer.findMany({
       where: { submissionId },
     });
@@ -127,6 +153,8 @@ export class SubmissionsService {
     let earned = 0;
     let total = 0;
     let hasOpen = false;
+    // File answers always need manual review (like OPEN)
+    if (needsFile) hasOpen = true;
 
     for (const q of assignment.questions) {
       total += q.points;
@@ -254,10 +282,37 @@ export class SubmissionsService {
       },
       include: {
         answers: true,
-        assignment: { select: { id: true, title: true } },
+        assignment: { select: { id: true, title: true, responseMode: true, maxXp: true } },
         user: { select: { id: true } },
       },
       orderBy: { createdAt: 'desc' },
+    }).then(async (rows) => {
+      const ids = rows.map((r) => r.id);
+      const files = ids.length
+        ? await this.prisma.storedFile.findMany({
+            where: {
+              ownerType: StoredFileOwnerType.SUBMISSION_ATTACHMENT,
+              ownerId: { in: ids },
+            },
+            select: {
+              id: true,
+              ownerId: true,
+              originalName: true,
+              mimeType: true,
+              sizeBytes: true,
+            },
+          })
+        : [];
+      const bySub = new Map<string, typeof files>();
+      for (const f of files) {
+        const list = bySub.get(f.ownerId) ?? [];
+        list.push(f);
+        bySub.set(f.ownerId, list);
+      }
+      return rows.map((r) => ({
+        ...r,
+        files: (bySub.get(r.id) ?? []).map(({ ownerId: _, ...rest }) => rest),
+      }));
     });
   }
 
@@ -327,16 +382,15 @@ export class SubmissionsService {
       void byQ;
     }
 
-    const scoreXp = computeScoreXp(
-      submission.assignment.maxXp,
-      earned,
-      total,
-    );
+    const scoreXp =
+      total <= 0 && dto.scoreXp !== undefined
+        ? Math.min(dto.scoreXp, submission.assignment.maxXp)
+        : computeScoreXp(submission.assignment.maxXp, earned, total);
     const updated = await this.prisma.submission.update({
       where: { id: submissionId },
       data: {
         status: SubmissionStatus.GRADED,
-        scorePoints: earned,
+        scorePoints: total <= 0 ? dto.scoreXp ?? 0 : earned,
         scoreXp,
         gradedAt: new Date(),
         gradedBy: actor.realUserId,

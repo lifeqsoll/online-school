@@ -12,7 +12,12 @@ import {
   ValidateNested,
 } from 'class-validator';
 import { Type } from 'class-transformer';
-import { AssignmentScope, QuestionType, ShortMatch } from '@prisma/client';
+import {
+  AssignmentResponseMode,
+  AssignmentScope,
+  QuestionType,
+  ShortMatch,
+} from '@prisma/client';
 
 export class QuestionDto {
   @IsEnum(QuestionType)
@@ -90,6 +95,10 @@ export class CreateAssignmentDto {
   dueAt?: string;
 
   @IsOptional()
+  @IsEnum(AssignmentResponseMode)
+  responseMode?: AssignmentResponseMode;
+
+  @IsOptional()
   @IsArray()
   @ValidateNested({ each: true })
   @Type(() => QuestionDto)
@@ -128,6 +137,10 @@ export class UpdateAssignmentDto {
   @IsOptional()
   @IsDateString()
   dueAt?: string | null;
+
+  @IsOptional()
+  @IsEnum(AssignmentResponseMode)
+  responseMode?: AssignmentResponseMode;
 }
 
 export class ReplaceQuestionsDto {

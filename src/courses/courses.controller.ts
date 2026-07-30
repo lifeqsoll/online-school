@@ -5,7 +5,7 @@ import {
   Param,
   Patch,
   Post,
-  Req,
+  Query,
 } from '@nestjs/common';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { Public } from '../common/decorators/public.decorator';
@@ -24,13 +24,22 @@ export class CoursesController {
 
   @Public()
   @Get()
-  list(@Req() req: { user?: AuthUser }) {
-    return this.courses.list(req.user);
+  list(
+    @CurrentUser() user: AuthUser | undefined,
+    @Query('managedOnly') managedOnly?: string,
+  ) {
+    return this.courses.list(user, {
+      managedOnly: managedOnly === '1' || managedOnly === 'true',
+    });
   }
 
+  @Public()
   @Get(':idOrSlug')
-  get(@Param('idOrSlug') idOrSlug: string) {
-    return this.courses.get(idOrSlug);
+  get(
+    @CurrentUser() user: AuthUser | undefined,
+    @Param('idOrSlug') idOrSlug: string,
+  ) {
+    return this.courses.getForViewer(user, idOrSlug);
   }
 
   @Post()

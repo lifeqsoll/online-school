@@ -212,4 +212,94 @@ describe('Homework (e2e)', () => {
     expect(graded.body.status).toBe('GRADED');
     expect(graded.body.scoreXp).toBe(40);
   });
+
+  it('FILE mode requires attachment then goes PENDING_REVIEW', async () => {
+    const asg = await request(app.getHttpServer())
+      .post(`/courses/${courseId}/assignments`)
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({
+        scope: 'COURSE',
+        title: 'File only',
+        maxXp: 20,
+        isPublished: true,
+        responseMode: 'FILE',
+        questions: [],
+      })
+      .expect(201);
+    expect(asg.body.responseMode).toBe('FILE');
+
+    const sub = await request(app.getHttpServer())
+      .post(`/assignments/${asg.body.id}/submissions`)
+      .set('Authorization', `Bearer ${studentToken}`)
+      .expect(201);
+
+    await request(app.getHttpServer())
+      .post(`/submissions/${sub.body.id}/submit`)
+      .set('Authorization', `Bearer ${studentToken}`)
+      .expect(400);
+
+    const PNG = Buffer.from(
+      'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==',
+      'base64',
+    );
+
+    await request(app.getHttpServer())
+      .post('/files')
+      .set('Authorization', `Bearer ${studentToken}`)
+      .field('ownerType', 'SUBMISSION_ATTACHMENT')
+      .field('ownerId', sub.body.id)
+      .attach('file', PNG, { filename: 'ans.png', contentType: 'image/png' })
+      .expect(201);
+
+    const pending = await request(app.getHttpServer())
+      .post(`/submissions/${sub.body.id}/submit`)
+      .set('Authorization', `Bearer ${studentToken}`)
+      .expect(201);
+    expect(pending.body.status).toBe('PENDING_REVIEW');
+  });
+
+  it('QUIZ still submits without files', async () => {
+    const asg = await request(app.getHttpServer())
+      .post(`/courses/${courseId}/assignments`)
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({
+        scope: 'COURSE',
+        title: 'Quiz no file',
+        maxXp: 10,
+        isPublished: true,
+        responseMode: 'QUIZ',
+        questions: [
+          {
+            type: 'CHOICE',
+            prompt: '1+1',
+            points: 10,
+            options: [
+              { id: 'a', text: '2' },
+              { id: 'b', text: '3' },
+            ],
+            correctKeys: ['a'],
+          },
+        ],
+      })
+      .expect(201);
+
+    const sub = await request(app.getHttpServer())
+      .post(`/assignments/${asg.body.id}/submissions`)
+      .set('Authorization', `Bearer ${studentToken}`)
+      .expect(201);
+
+    await request(app.getHttpServer())
+      .patch(`/submissions/${sub.body.id}`)
+      .set('Authorization', `Bearer ${studentToken}`)
+      .send({
+        answers: [{ questionId: asg.body.questions[0].id, value: ['a'] }],
+      })
+      .expect(200);
+
+    const done = await request(app.getHttpServer())
+      .post(`/submissions/${sub.body.id}/submit`)
+      .set('Authorization', `Bearer ${studentToken}`)
+      .expect(201);
+    expect(done.body.status).toBe('AUTO_GRADED');
+  });
 });

@@ -44,4 +44,10 @@ export class GradeSubmissionDto {
   @ValidateNested({ each: true })
   @Type(() => GradeAnswerDto)
   answers!: GradeAnswerDto[];
+
+  /** Used when assignment has no OPEN questions (e.g. FILE-only). */
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  scoreXp?: number;
 }

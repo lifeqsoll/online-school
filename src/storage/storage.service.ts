@@ -4,6 +4,7 @@ import {
   PutObjectCommand,
   S3Client,
   GetObjectCommand,
+  DeleteObjectCommand,
 } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { randomUUID } from 'crypto';
@@ -43,6 +44,16 @@ export class StorageService {
     return `courses/${courseId}/lessons/${lessonId}/${randomUUID()}-${safe}`;
   }
 
+  buildFileKey(
+    courseId: string,
+    ownerType: string,
+    ownerId: string,
+    filename: string,
+  ): string {
+    const safe = filename.replace(/[^a-zA-Z0-9._-]/g, '_');
+    return `courses/${courseId}/files/${ownerType}/${ownerId}/${randomUUID()}-${safe}`;
+  }
+
   async uploadObject(
     key: string,
     body: Buffer,
@@ -55,6 +66,12 @@ export class StorageService {
         Body: body,
         ContentType: contentType,
       }),
+    );
+  }
+
+  async deleteObject(key: string): Promise<void> {
+    await this.client.send(
+      new DeleteObjectCommand({ Bucket: this.bucket, Key: key }),
     );
   }
 

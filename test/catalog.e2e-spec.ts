@@ -84,6 +84,25 @@ describe('Catalog (e2e)', () => {
       .expect(200);
   });
 
+  it('guest can list published courses without auth', async () => {
+    const res = await request(app.getHttpServer()).get('/courses').expect(200);
+    expect(Array.isArray(res.body)).toBe(true);
+    for (const c of res.body) {
+      expect(c.isPublished).toBe(true);
+    }
+  });
+
+  it('guest can get published course detail', async () => {
+    const res = await request(app.getHttpServer())
+      .get(`/courses/${courseId}`)
+      .expect(200);
+    expect(res.body.id).toBe(courseId);
+    const lesson = res.body.modules?.[0]?.lessons?.[0];
+    expect(lesson?.title).toBe('L1');
+    expect(lesson?.videoUrl).toBeUndefined();
+    expect(lesson?.content).toBeUndefined();
+  });
+
   it('student free-enrolls and gets playback', async () => {
     await request(app.getHttpServer())
       .post(`/courses/${courseId}/enroll`)
