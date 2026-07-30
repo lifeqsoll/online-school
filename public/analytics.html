@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Analytics Test Console</title>
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+  <header class="top">
+    <div>
+      <p class="eyebrow"><a href="/index.html" style="color:inherit">← Auth</a> · <a href="/homework.html" style="color:inherit">Homework</a> · Analytics</p>
+      <h1>Analytics console</h1>
+    </div>
+    <div id="session" class="pill">no token</div>
+  </header>
+  <main class="grid">
+    <section class="panel">
+      <h2>Login</h2>
+      <form id="login">
+        <label>Email <input name="email" value="admin@online-school.local" /></label>
+        <label>Password <input name="password" type="password" value="ChangeMeAdmin123!" /></label>
+        <button type="submit">Login</button>
+      </form>
+      <label>Course ID <input id="courseId" /></label>
+    </section>
+    <section class="panel">
+      <h2>Topic</h2>
+      <form id="topic">
+        <label>Name <input name="name" value="Комбинаторика" /></label>
+        <button type="submit">Create topic</button>
+      </form>
+      <button type="button" id="btn-topics">List topics</button>
+    </section>
+    <section class="panel">
+      <h2>Reports</h2>
+      <button type="button" id="btn-radar">Radar /me</button>
+      <button type="button" id="btn-cold">Cold lessons</button>
+      <button type="button" id="btn-struggle">Struggling</button>
+      <button type="button" id="btn-graph">Graph</button>
+    </section>
+    <section class="panel wide">
+      <h2>Log</h2>
+      <pre id="log"></pre>
+    </section>
+  </main>
+  <script src="/analytics.js"></script>
+</body>
+</html>

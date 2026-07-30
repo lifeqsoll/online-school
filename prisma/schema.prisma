@@ -1,0 +1,521 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum GlobalRole {
+  STUDENT
+  ADMIN
+}
+
+enum MembershipRole {
+  CURATOR
+}
+
+enum EnrollmentStatus {
+  ACTIVE
+  SUSPENDED
+  COMPLETED
+}
+
+enum EnrollmentSource {
+  FREE
+  PAYMENT
+  GRANT
+}
+
+enum LessonType {
+  VIDEO
+  TEXT
+  MIXED
+}
+
+enum VideoSource {
+  UPLOADED
+  EXTERNAL_URL
+}
+
+enum PaymentStatus {
+  PENDING
+  SUCCEEDED
+  FAILED
+  CANCELED
+  REFUNDED
+}
+
+enum PaymentProvider {
+  MOCK
+  YOOKASSA
+}
+
+enum AuditAction {
+  LOGIN
+  LOGOUT
+  REFRESH
+  IMPERSONATE_START
+  IMPERSONATE_STOP
+  USER_CREATE
+  USER_UPDATE
+  PASSWORD_CHANGE
+  PASSWORD_RESET_REQUEST
+  PASSWORD_RESET_COMPLETE
+  COURSE_CREATE
+  COURSE_UPDATE
+  ENROLL
+  PAYMENT_CREATE
+  PAYMENT_SUCCEEDED
+  GRANT_ENROLL
+  LESSON_UPDATE
+  ASSIGNMENT_CREATE
+  ASSIGNMENT_UPDATE
+  SUBMISSION_SUBMIT
+  SUBMISSION_GRADE
+}
+
+enum AssignmentScope {
+  LESSON
+  MODULE
+  COURSE
+}
+
+enum QuestionType {
+  CHOICE
+  SHORT
+  OPEN
+}
+
+enum ShortMatch {
+  EXACT
+  NUMBER
+}
+
+enum SubmissionStatus {
+  IN_PROGRESS
+  SUBMITTED
+  AUTO_GRADED
+  PENDING_REVIEW
+  GRADED
+}
+
+enum XpReason {
+  BEST_ATTEMPT
+}
+
+model User {
+  id              String     @id @default(cuid())
+  emailEnc        String
+  emailHash       String     @unique
+  passwordHash    String
+  firstNameEnc    String?
+  lastNameEnc     String?
+  globalRole      GlobalRole @default(STUDENT)
+  emailVerifiedAt DateTime?
+  isActive        Boolean    @default(true)
+  createdAt       DateTime   @default(now())
+  updatedAt       DateTime   @updatedAt
+
+  memberships         CourseMembership[]
+  enrollments         Enrollment[]
+  payments            Payment[]
+  auditLogs           AuditLog[]              @relation("ActorLogs")
+  auditAsTarget       AuditLog[]              @relation("TargetLogs")
+  verificationCodes   EmailVerificationCode[]
+  passwordResetTokens PasswordResetToken[]
+  submissions         Submission[]
+  gradedSubmissions   Submission[]            @relation("SubmissionGrader")
+  xpBalances          XpBalance[]
+  xpLedgers           XpLedger[]
+  assignmentBestXps   AssignmentBestXp[]
+  lessonEngagements   LessonEngagement[]
+  topicMasteries      TopicMastery[]
+}
+
+model EmailVerificationCode {
+  id         String    @id @default(cuid())
+  userId     String
+  codeHash   String
+  expiresAt  DateTime
+  consumedAt DateTime?
+  createdAt  DateTime  @default(now())
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model PasswordResetToken {
+  id         String    @id @default(cuid())
+  userId     String
+  tokenHash  String
+  expiresAt  DateTime
+  consumedAt DateTime?
+  createdAt  DateTime  @default(now())
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([tokenHash])
+}
+
+model Course {
+  id          String   @id @default(cuid())
+  title       String
+  slug        String   @unique
+  description String?
+  isPublished Boolean  @default(false)
+  priceCents  Int      @default(0)
+  currency    String   @default("RUB")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  modules     CourseModule[]
+  memberships CourseMembership[]
+  enrollments Enrollment[]
+  payments    Payment[]
+  assignments Assignment[]
+  xpBalances  XpBalance[]
+  xpLedgers   XpLedger[]
+  topics      Topic[]
+}
+
+model CourseModule {
+  id          String   @id @default(cuid())
+  courseId    String
+  title       String
+  description String?
+  sortOrder   Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  course      Course       @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  lessons     Lesson[]
+  assignments Assignment[]
+
+  @@index([courseId, sortOrder])
+}
+
+model Lesson {
+  id          String       @id @default(cuid())
+  moduleId    String
+  title       String
+  type        LessonType   @default(VIDEO)
+  content     String?
+  videoSource VideoSource?
+  videoUrl    String?
+  storageKey  String?
+  durationSec Int?
+  sortOrder   Int          @default(0)
+  isPublished Boolean      @default(false)
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+
+  module      CourseModule @relation(fields: [moduleId], references: [id], onDelete: Cascade)
+  assignments Assignment[]
+  topicLinks  LessonTopic[]
+
+  @@index([moduleId, sortOrder])
+}
+
+model CourseMembership {
+  id        String         @id @default(cuid())
+  courseId  String
+  userId    String
+  role      MembershipRole
+  createdAt DateTime       @default(now())
+
+  course Course @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([courseId, userId])
+  @@index([userId])
+}
+
+model Enrollment {
+  id        String           @id @default(cuid())
+  courseId  String
+  userId    String
+  status    EnrollmentStatus @default(ACTIVE)
+  source    EnrollmentSource @default(FREE)
+  grantedBy String?
+  paymentId String?          @unique
+  createdAt DateTime         @default(now())
+
+  course  Course   @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  user    User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  payment Payment? @relation(fields: [paymentId], references: [id])
+
+  @@unique([courseId, userId])
+  @@index([userId])
+}
+
+model Payment {
+  id                String          @id @default(cuid())
+  courseId          String
+  userId            String
+  amountCents       Int
+  currency          String          @default("RUB")
+  status            PaymentStatus   @default(PENDING)
+  provider          PaymentProvider @default(MOCK)
+  providerPaymentId String?
+  confirmationUrl   String?
+  metadata          Json?
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
+
+  course     Course      @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  user       User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  enrollment Enrollment?
+
+  @@index([userId, status])
+  @@index([providerPaymentId])
+}
+
+model AuditLog {
+  id        String      @id @default(cuid())
+  actorId   String?
+  targetId  String?
+  action    AuditAction
+  ip        String?
+  userAgent String?
+  meta      Json?
+  createdAt DateTime    @default(now())
+
+  actor  User? @relation("ActorLogs", fields: [actorId], references: [id], onDelete: SetNull)
+  target User? @relation("TargetLogs", fields: [targetId], references: [id], onDelete: SetNull)
+
+  @@index([actorId, createdAt])
+  @@index([action, createdAt])
+}
+
+model Assignment {
+  id          String          @id @default(cuid())
+  courseId    String
+  scope       AssignmentScope
+  lessonId    String?
+  moduleId    String?
+  title       String
+  description String?
+  maxXp       Int
+  maxAttempts Int?
+  isPublished Boolean         @default(false)
+  sortOrder   Int             @default(0)
+  dueAt       DateTime?
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+
+  course      Course             @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  lesson      Lesson?            @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+  module      CourseModule?      @relation(fields: [moduleId], references: [id], onDelete: Cascade)
+  questions   Question[]
+  submissions Submission[]
+  bestXps     AssignmentBestXp[]
+  xpLedgers   XpLedger[]
+  topicLinks  AssignmentTopic[]
+
+  @@index([courseId, sortOrder])
+  @@index([lessonId])
+  @@index([moduleId])
+}
+
+model Question {
+  id              String       @id @default(cuid())
+  assignmentId    String
+  type            QuestionType
+  prompt          String
+  sortOrder       Int          @default(0)
+  points          Int          @default(1)
+  options         Json?
+  correctKeys     Json?
+  shortMatch      ShortMatch?
+  numberTolerance Decimal?     @db.Decimal(12, 6)
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+
+  assignment Assignment @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
+  answers    Answer[]
+
+  @@index([assignmentId, sortOrder])
+}
+
+model Submission {
+  id           String           @id @default(cuid())
+  assignmentId String
+  userId       String
+  attemptNo    Int
+  status       SubmissionStatus @default(IN_PROGRESS)
+  scorePoints  Int?
+  scoreXp      Int?
+  submittedAt  DateTime?
+  gradedAt     DateTime?
+  gradedBy     String?
+  createdAt    DateTime         @default(now())
+  updatedAt    DateTime         @updatedAt
+
+  assignment Assignment @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
+  user       User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  grader     User?      @relation("SubmissionGrader", fields: [gradedBy], references: [id], onDelete: SetNull)
+  answers    Answer[]
+  bestXps    AssignmentBestXp[]
+  xpLedgers  XpLedger[]
+
+  @@unique([assignmentId, userId, attemptNo])
+  @@index([assignmentId, status])
+  @@index([userId])
+}
+
+model Answer {
+  id            String   @id @default(cuid())
+  submissionId  String
+  questionId    String
+  value         Json
+  isCorrect     Boolean?
+  pointsAwarded Int?
+  feedback      String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  submission Submission @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+  question   Question   @relation(fields: [questionId], references: [id], onDelete: Cascade)
+
+  @@unique([submissionId, questionId])
+}
+
+model XpBalance {
+  id        String   @id @default(cuid())
+  userId    String
+  courseId  String
+  totalXp   Int      @default(0)
+  updatedAt DateTime @updatedAt
+
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  course Course @relation(fields: [courseId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, courseId])
+  @@index([courseId, totalXp])
+}
+
+model XpLedger {
+  id           String   @id @default(cuid())
+  userId       String
+  courseId     String
+  assignmentId String
+  submissionId String?
+  deltaXp      Int
+  reason       XpReason
+  createdAt    DateTime @default(now())
+
+  user       User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  course     Course      @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  assignment Assignment  @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
+  submission Submission? @relation(fields: [submissionId], references: [id], onDelete: SetNull)
+
+  @@index([userId, courseId, createdAt])
+  @@index([assignmentId])
+}
+
+model AssignmentBestXp {
+  id           String @id @default(cuid())
+  userId       String
+  assignmentId String
+  bestXp       Int    @default(0)
+  submissionId String?
+
+  user       User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  assignment Assignment  @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
+  submission Submission? @relation(fields: [submissionId], references: [id], onDelete: SetNull)
+
+  @@unique([userId, assignmentId])
+}
+
+enum OutboxStatus {
+  PENDING
+  PROCESSED
+  FAILED
+}
+
+model Topic {
+  id        String   @id @default(cuid())
+  courseId  String
+  name      String
+  slug      String
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  course           Course            @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  lessonLinks      LessonTopic[]
+  assignmentLinks  AssignmentTopic[]
+  masteries        TopicMastery[]
+
+  @@unique([courseId, slug])
+  @@index([courseId, sortOrder])
+}
+
+model LessonTopic {
+  lessonId String
+  topicId  String
+
+  lesson Lesson @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+  topic  Topic  @relation(fields: [topicId], references: [id], onDelete: Cascade)
+
+  @@id([lessonId, topicId])
+  @@index([topicId])
+}
+
+model AssignmentTopic {
+  assignmentId String
+  topicId      String
+
+  assignment Assignment @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
+  topic      Topic      @relation(fields: [topicId], references: [id], onDelete: Cascade)
+
+  @@id([assignmentId, topicId])
+  @@index([topicId])
+}
+
+model LessonEngagement {
+  id              String    @id @default(cuid())
+  userId          String
+  lessonId        String
+  courseId        String
+  viewedAt        DateTime?
+  completedAt     DateTime?
+  skippedAt       DateTime?
+  maxProgressPct  Int       @default(0)
+  updatedAt       DateTime  @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, lessonId])
+  @@index([courseId, lessonId])
+}
+
+model TopicMastery {
+  id         String   @id @default(cuid())
+  userId     String
+  courseId   String
+  topicId    String
+  scorePct   Int      @default(0)
+  struggling Boolean  @default(false)
+  updatedAt  DateTime @updatedAt
+
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  topic Topic @relation(fields: [topicId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, topicId])
+  @@index([courseId, topicId])
+}
+
+model AnalyticsOutbox {
+  id          String       @id @default(cuid())
+  type        String
+  payload     Json
+  status      OutboxStatus @default(PENDING)
+  attempts    Int          @default(0)
+  lastError   String?
+  createdAt   DateTime     @default(now())
+  processedAt DateTime?
+
+  @@index([status, createdAt])
+}

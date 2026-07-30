@@ -1,0 +1,33 @@
+export default () => ({
+  nodeEnv: process.env.NODE_ENV ?? 'development',
+  port: parseInt(process.env.PORT ?? '3000', 10),
+  corsOrigin: process.env.CORS_ORIGIN ?? 'http://localhost:3000',
+  databaseUrl: process.env.DATABASE_URL,
+  redisUrl: process.env.REDIS_URL,
+  jwtAccessSecret: process.env.JWT_ACCESS_SECRET,
+  encryptionKey: process.env.ENCRYPTION_KEY,
+  emailHmacKey: process.env.EMAIL_HMAC_KEY,
+  adminEmail: process.env.ADMIN_EMAIL,
+  adminPassword: process.env.ADMIN_PASSWORD,
+  devExposeResetToken: process.env.DEV_EXPOSE_RESET_TOKEN === 'true',
+  jwtAccessTtl: '15m',
+  refreshTtlSeconds: 60 * 60 * 24 * 7,
+  passwordResetTtlMinutes: 45,
+  paymentProvider: process.env.PAYMENT_PROVIDER ?? 'mock',
+  paymentReturnUrl:
+    process.env.PAYMENT_RETURN_URL ?? 'http://localhost:3000/catalog.html',
+  s3: {
+    endpoint: process.env.S3_ENDPOINT ?? 'http://localhost:9000',
+    region: process.env.S3_REGION ?? 'us-east-1',
+    accessKey: process.env.S3_ACCESS_KEY ?? 'minioadmin',
+    secretKey: process.env.S3_SECRET_KEY ?? 'minioadmin',
+    bucket: process.env.S3_BUCKET ?? 'lessons',
+    forcePathStyle: process.env.S3_FORCE_PATH_STYLE !== 'false',
+    signedUrlTtlSec: parseInt(process.env.S3_SIGNED_URL_TTL_SEC ?? '3600', 10),
+  },
+  neo4j: {
+    uri: process.env.NEO4J_URI ?? '',
+    user: process.env.NEO4J_USER ?? 'neo4j',
+    password: process.env.NEO4J_PASSWORD ?? '',
+  },
+});

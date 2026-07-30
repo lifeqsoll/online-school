@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Online School — Auth Test Console</title>
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+  <header class="top">
+    <div>
+      <p class="eyebrow">Foundation · test console · <a href="/catalog.html" style="color:inherit">Catalog →</a> · <a href="/homework.html" style="color:inherit">Homework →</a> · <a href="/analytics.html" style="color:inherit">Analytics →</a></p>
+      <h1>Online School API</h1>
+    </div>
+    <div id="health" class="pill">checking…</div>
+  </header>
+
+  <main class="grid">
+    <section class="panel">
+      <h2>Register</h2>
+      <form id="form-register">
+        <label>Email <input name="email" type="email" required placeholder="student@test.local" /></label>
+        <label>Password <input name="password" type="password" required minlength="8" value="Secret123!" /></label>
+        <label>First name <input name="firstName" type="text" value="Test" /></label>
+        <button type="submit">Register</button>
+      </form>
+    </section>
+
+    <section class="panel">
+      <h2>Login</h2>
+      <form id="form-login">
+        <label>Email <input name="email" type="email" required value="admin@online-school.local" /></label>
+        <label>Password <input name="password" type="password" required value="ChangeMeAdmin123!" /></label>
+        <button type="submit">Login</button>
+      </form>
+    </section>
+
+    <section class="panel">
+      <h2>Session</h2>
+      <div class="actions">
+        <button type="button" id="btn-me">GET /users/me</button>
+        <button type="button" id="btn-refresh">Refresh token</button>
+        <button type="button" id="btn-logout">Logout</button>
+        <button type="button" id="btn-admin-users">GET /admin/users</button>
+      </div>
+      <pre id="session-meta" class="meta"></pre>
+    </section>
+
+    <section class="panel">
+      <h2>Password reset</h2>
+      <form id="form-forgot">
+        <label>Email <input name="email" type="email" required value="admin@online-school.local" /></label>
+        <button type="submit">Forgot password</button>
+      </form>
+      <form id="form-reset">
+        <label>Reset token <input name="token" type="text" required placeholder="from response / server log" /></label>
+        <label>New password <input name="newPassword" type="password" required minlength="8" value="NewSecret123!" /></label>
+        <button type="submit">Reset password</button>
+      </form>
+    </section>
+
+    <section class="panel">
+      <h2>Impersonation (admin)</h2>
+      <form id="form-impersonate">
+        <label>Target userId <input name="userId" type="text" required placeholder="cuid from /admin/users" /></label>
+        <button type="submit">Start impersonate</button>
+      </form>
+      <button type="button" id="btn-stop-imp">Stop impersonate</button>
+    </section>
+
+    <section class="panel panel-wide">
+      <h2>Response</h2>
+      <pre id="out">Ready.</pre>
+    </section>
+  </main>
+
+  <script src="/app.js"></script>
+</body>
+</html>

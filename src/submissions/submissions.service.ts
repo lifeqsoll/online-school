@@ -1,0 +1,376 @@
+import {
+  BadRequestException,
+  ForbiddenException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
+import {
+  AuditAction,
+  QuestionType,
+  ShortMatch,
+  SubmissionStatus,
+} from '@prisma/client';
+import { AuditService } from '../audit/audit.service';
+import { CourseAccessService } from '../enrollments/course-access.service';
+import {
+  computeScoreXp,
+  gradeChoice,
+  gradeShort,
+} from '../grading/auto-grade';
+import { PrismaService } from '../prisma/prisma.service';
+import { AuthUser } from '../rbac/auth-user';
+import { XpService } from '../xp/xp.service';
+import { TopicMasteryService } from '../analytics/topic-mastery.service';
+import {
+  GradeSubmissionDto,
+  SaveAnswersDto,
+} from './dto/submission.dto';
+
+@Injectable()
+export class SubmissionsService {
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly access: CourseAccessService,
+    private readonly xp: XpService,
+    private readonly mastery: TopicMasteryService,
+    private readonly audit: AuditService,
+  ) {}
+
+  async createAttempt(user: AuthUser, assignmentId: string) {
+    const assignment = await this.prisma.assignment.findUnique({
+      where: { id: assignmentId },
+    });
+    if (!assignment || !assignment.isPublished) {
+      throw new NotFoundException('Assignment not found');
+    }
+    if (!(await this.access.hasContentAccess(user, assignment.courseId))) {
+      throw new ForbiddenException();
+    }
+
+    const count = await this.prisma.submission.count({
+      where: { assignmentId, userId: user.id },
+    });
+    if (
+      assignment.maxAttempts != null &&
+      count >= assignment.maxAttempts
+    ) {
+      throw new BadRequestException('Max attempts reached');
+    }
+
+    return this.prisma.submission.create({
+      data: {
+        assignmentId,
+        userId: user.id,
+        attemptNo: count + 1,
+        status: SubmissionStatus.IN_PROGRESS,
+      },
+      include: { answers: true },
+    });
+  }
+
+  async saveAnswers(user: AuthUser, submissionId: string, dto: SaveAnswersDto) {
+    const submission = await this.loadOwned(user, submissionId);
+    if (submission.status !== SubmissionStatus.IN_PROGRESS) {
+      throw new BadRequestException('Submission is not editable');
+    }
+
+    const questionIds = new Set(
+      (
+        await this.prisma.question.findMany({
+          where: { assignmentId: submission.assignmentId },
+          select: { id: true },
+        })
+      ).map((q) => q.id),
+    );
+
+    for (const a of dto.answers) {
+      if (!questionIds.has(a.questionId)) {
+        throw new BadRequestException(`Unknown question ${a.questionId}`);
+      }
+      await this.prisma.answer.upsert({
+        where: {
+          submissionId_questionId: {
+            submissionId,
+            questionId: a.questionId,
+          },
+        },
+        create: {
+          submissionId,
+          questionId: a.questionId,
+          value: a.value as object,
+        },
+        update: { value: a.value as object },
+      });
+    }
+
+    return this.prisma.submission.findUniqueOrThrow({
+      where: { id: submissionId },
+      include: { answers: true },
+    });
+  }
+
+  async submit(user: AuthUser, submissionId: string) {
+    const submission = await this.loadOwned(user, submissionId);
+    if (submission.status !== SubmissionStatus.IN_PROGRESS) {
+      throw new BadRequestException('Already submitted');
+    }
+
+    const assignment = await this.prisma.assignment.findUniqueOrThrow({
+      where: { id: submission.assignmentId },
+      include: { questions: true },
+    });
+    const answers = await this.prisma.answer.findMany({
+      where: { submissionId },
+    });
+    const byQ = new Map(answers.map((a) => [a.questionId, a]));
+
+    let earned = 0;
+    let total = 0;
+    let hasOpen = false;
+
+    for (const q of assignment.questions) {
+      total += q.points;
+      const ans = byQ.get(q.id);
+      if (q.type === QuestionType.OPEN) {
+        hasOpen = true;
+        continue;
+      }
+      if (!ans) {
+        await this.prisma.answer.upsert({
+          where: {
+            submissionId_questionId: {
+              submissionId,
+              questionId: q.id,
+            },
+          },
+          create: {
+            submissionId,
+            questionId: q.id,
+            value: null as unknown as object,
+            isCorrect: false,
+            pointsAwarded: 0,
+          },
+          update: { isCorrect: false, pointsAwarded: 0 },
+        });
+        continue;
+      }
+
+      let result = { isCorrect: false, points: 0 };
+      if (q.type === QuestionType.CHOICE) {
+        const selected = Array.isArray(ans.value)
+          ? (ans.value as string[])
+          : [String(ans.value)];
+        const keys = (q.correctKeys as string[]) ?? [];
+        result = gradeChoice(keys, selected, q.points);
+      } else if (q.type === QuestionType.SHORT) {
+        const keys = (q.correctKeys as string[]) ?? [];
+        const match =
+          q.shortMatch === ShortMatch.NUMBER ? 'NUMBER' : 'EXACT';
+        result = gradeShort({
+          match,
+          correctKeys: keys,
+          answer: String(ans.value ?? ''),
+          tolerance: q.numberTolerance
+            ? Number(q.numberTolerance)
+            : 0,
+          points: q.points,
+        });
+      }
+
+      earned += result.points;
+      await this.prisma.answer.update({
+        where: { id: ans.id },
+        data: {
+          isCorrect: result.isCorrect,
+          pointsAwarded: result.points,
+        },
+      });
+    }
+
+    const scoreXp = computeScoreXp(assignment.maxXp, earned, total);
+    const status = hasOpen
+      ? SubmissionStatus.PENDING_REVIEW
+      : SubmissionStatus.AUTO_GRADED;
+
+    const updated = await this.prisma.submission.update({
+      where: { id: submissionId },
+      data: {
+        status,
+        scorePoints: hasOpen ? null : earned,
+        scoreXp: hasOpen ? null : scoreXp,
+        submittedAt: new Date(),
+        gradedAt: hasOpen ? null : new Date(),
+      },
+      include: { answers: true },
+    });
+
+    await this.audit.append({
+      actorId: user.realUserId,
+      targetId: user.id,
+      action: AuditAction.SUBMISSION_SUBMIT,
+      meta: { submissionId, status },
+    });
+
+    if (!hasOpen) {
+      await this.xp.syncBestAttempt(
+        user.id,
+        assignment.courseId,
+        assignment.id,
+        submissionId,
+      );
+      await this.mastery.recomputeForUserAssignment(user.id, assignment.id);
+    }
+
+    return updated;
+  }
+
+  async listMine(user: AuthUser, assignmentId: string) {
+    const assignment = await this.prisma.assignment.findUnique({
+      where: { id: assignmentId },
+    });
+    if (!assignment) throw new NotFoundException();
+    if (!(await this.access.hasContentAccess(user, assignment.courseId))) {
+      throw new ForbiddenException();
+    }
+    return this.prisma.submission.findMany({
+      where: { assignmentId, userId: user.id },
+      include: { answers: true },
+      orderBy: { attemptNo: 'asc' },
+    });
+  }
+
+  async listCourse(
+    actor: AuthUser,
+    courseId: string,
+    status?: SubmissionStatus,
+  ) {
+    if (!(await this.access.canManageCourse(actor, courseId))) {
+      throw new ForbiddenException();
+    }
+    return this.prisma.submission.findMany({
+      where: {
+        assignment: { courseId },
+        ...(status ? { status } : {}),
+      },
+      include: {
+        answers: true,
+        assignment: { select: { id: true, title: true } },
+        user: { select: { id: true } },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+  }
+
+  async grade(actor: AuthUser, submissionId: string, dto: GradeSubmissionDto) {
+    const submission = await this.prisma.submission.findUnique({
+      where: { id: submissionId },
+      include: {
+        assignment: { include: { questions: true } },
+        answers: true,
+      },
+    });
+    if (!submission) throw new NotFoundException();
+    if (
+      !(await this.access.canManageCourse(actor, submission.assignment.courseId))
+    ) {
+      throw new ForbiddenException();
+    }
+    if (
+      submission.status !== SubmissionStatus.PENDING_REVIEW &&
+      submission.status !== SubmissionStatus.GRADED
+    ) {
+      throw new BadRequestException('Submission not ready for grading');
+    }
+
+    const byQ = new Map(
+      submission.assignment.questions.map((q) => [q.id, q]),
+    );
+    let earned = 0;
+    let total = 0;
+
+    for (const q of submission.assignment.questions) {
+      total += q.points;
+      if (q.type !== QuestionType.OPEN) {
+        const existing = submission.answers.find((a) => a.questionId === q.id);
+        earned += existing?.pointsAwarded ?? 0;
+        continue;
+      }
+      const grade = dto.answers.find((a) => a.questionId === q.id);
+      if (!grade) {
+        throw new BadRequestException(`Missing grade for ${q.id}`);
+      }
+      if (grade.pointsAwarded > q.points) {
+        throw new BadRequestException('pointsAwarded exceeds question points');
+      }
+      earned += grade.pointsAwarded;
+      await this.prisma.answer.upsert({
+        where: {
+          submissionId_questionId: {
+            submissionId,
+            questionId: q.id,
+          },
+        },
+        create: {
+          submissionId,
+          questionId: q.id,
+          value: '',
+          pointsAwarded: grade.pointsAwarded,
+          feedback: grade.feedback,
+          isCorrect: grade.pointsAwarded >= q.points,
+        },
+        update: {
+          pointsAwarded: grade.pointsAwarded,
+          feedback: grade.feedback,
+          isCorrect: grade.pointsAwarded >= q.points,
+        },
+      });
+      void byQ;
+    }
+
+    const scoreXp = computeScoreXp(
+      submission.assignment.maxXp,
+      earned,
+      total,
+    );
+    const updated = await this.prisma.submission.update({
+      where: { id: submissionId },
+      data: {
+        status: SubmissionStatus.GRADED,
+        scorePoints: earned,
+        scoreXp,
+        gradedAt: new Date(),
+        gradedBy: actor.realUserId,
+      },
+      include: { answers: true },
+    });
+
+    await this.audit.append({
+      actorId: actor.realUserId,
+      targetId: submission.userId,
+      action: AuditAction.SUBMISSION_GRADE,
+      meta: { submissionId, scoreXp },
+    });
+
+    await this.xp.syncBestAttempt(
+      submission.userId,
+      submission.assignment.courseId,
+      submission.assignmentId,
+      submissionId,
+    );
+    await this.mastery.recomputeForUserAssignment(
+      submission.userId,
+      submission.assignmentId,
+    );
+
+    return updated;
+  }
+
+  private async loadOwned(user: AuthUser, submissionId: string) {
+    const submission = await this.prisma.submission.findUnique({
+      where: { id: submissionId },
+    });
+    if (!submission) throw new NotFoundException('Submission not found');
+    if (submission.userId !== user.id) throw new ForbiddenException();
+    return submission;
+  }
+}

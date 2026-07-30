@@ -1,0 +1,124 @@
+{
+  "info": {
+    "name": "Online School — Catalog",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:3000" },
+    { "key": "accessToken", "value": "" },
+    { "key": "courseId", "value": "" },
+    { "key": "moduleId", "value": "" },
+    { "key": "lessonId", "value": "" },
+    { "key": "paymentId", "value": "" },
+    { "key": "adminEmail", "value": "admin@online-school.local" },
+    { "key": "adminPassword", "value": "ChangeMeAdmin123!" }
+  ],
+  "item": [
+    {
+      "name": "Login admin",
+      "event": [{ "listen": "test", "script": { "exec": ["const j=pm.response.json(); pm.collectionVariables.set('accessToken', j.accessToken);"] } }],
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "body": { "mode": "raw", "raw": "{\n  \"email\": \"{{adminEmail}}\",\n  \"password\": \"{{adminPassword}}\"\n}" },
+        "url": "{{baseUrl}}/auth/login"
+      }
+    },
+    {
+      "name": "Create course",
+      "event": [{ "listen": "test", "script": { "exec": ["pm.collectionVariables.set('courseId', pm.response.json().id);"] } }],
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" },
+          { "key": "Authorization", "value": "Bearer {{accessToken}}" }
+        ],
+        "body": { "mode": "raw", "raw": "{\n  \"title\": \"Postman Course\",\n  \"priceCents\": 0,\n  \"isPublished\": true\n}" },
+        "url": "{{baseUrl}}/courses"
+      }
+    },
+    {
+      "name": "Add module",
+      "event": [{ "listen": "test", "script": { "exec": ["pm.collectionVariables.set('moduleId', pm.response.json().id);"] } }],
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" },
+          { "key": "Authorization", "value": "Bearer {{accessToken}}" }
+        ],
+        "body": { "mode": "raw", "raw": "{\n  \"title\": \"Module 1\"\n}" },
+        "url": "{{baseUrl}}/courses/{{courseId}}/modules"
+      }
+    },
+    {
+      "name": "Add lesson",
+      "event": [{ "listen": "test", "script": { "exec": ["pm.collectionVariables.set('lessonId', pm.response.json().id);"] } }],
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" },
+          { "key": "Authorization", "value": "Bearer {{accessToken}}" }
+        ],
+        "body": { "mode": "raw", "raw": "{\n  \"title\": \"Lesson 1\",\n  \"type\": \"VIDEO\",\n  \"isPublished\": true\n}" },
+        "url": "{{baseUrl}}/modules/{{moduleId}}/lessons"
+      }
+    },
+    {
+      "name": "Set external video",
+      "request": {
+        "method": "PATCH",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" },
+          { "key": "Authorization", "value": "Bearer {{accessToken}}" }
+        ],
+        "body": { "mode": "raw", "raw": "{\n  \"url\": \"https://www.youtube.com/watch?v=dQw4w9WgXcQ\"\n}" },
+        "url": "{{baseUrl}}/lessons/{{lessonId}}/video/external"
+      }
+    },
+    {
+      "name": "Free enroll",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{accessToken}}" },
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "body": { "mode": "raw", "raw": "{}" },
+        "url": "{{baseUrl}}/courses/{{courseId}}/enroll"
+      }
+    },
+    {
+      "name": "Playback",
+      "request": {
+        "method": "GET",
+        "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }],
+        "url": "{{baseUrl}}/lessons/{{lessonId}}/playback"
+      }
+    },
+    {
+      "name": "Checkout paid (set price first)",
+      "event": [{ "listen": "test", "script": { "exec": ["const j=pm.response.json(); if(j.payment) pm.collectionVariables.set('paymentId', j.payment.id);"] } }],
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{accessToken}}" },
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "body": { "mode": "raw", "raw": "{}" },
+        "url": "{{baseUrl}}/courses/{{courseId}}/checkout"
+      }
+    },
+    {
+      "name": "Mock confirm payment",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{accessToken}}" },
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "body": { "mode": "raw", "raw": "{\n  \"paymentId\": \"{{paymentId}}\"\n}" },
+        "url": "{{baseUrl}}/payments/mock/confirm"
+      }
+    }
+  ]
+}
