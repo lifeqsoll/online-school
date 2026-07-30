@@ -70,12 +70,24 @@ export class CoursesService {
     const course = await this.get(idOrSlug);
     const canManage =
       !!user && (await this.access.canManageCourse(user, course.id));
+    const hasAccess =
+      !!user && (await this.access.hasContentAccess(user, course.id));
 
     if (!course.isPublished && !canManage) {
       throw new NotFoundException('Course not found');
     }
 
     if (canManage) return course;
+
+    if (hasAccess) {
+      return {
+        ...course,
+        modules: course.modules.map((m) => ({
+          ...m,
+          lessons: m.lessons.filter((l) => l.isPublished),
+        })),
+      };
+    }
 
     return {
       ...course,

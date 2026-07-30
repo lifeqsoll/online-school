@@ -21,6 +21,57 @@ export function clearTokens() {
   localStorage.removeItem(REFRESH);
 }
 
+export class ApiError extends Error {
+  status: number;
+
+  constructor(message: string, status: number) {
+    super(message);
+    this.name = 'ApiError';
+    this.status = status;
+  }
+}
+
+function extractMessage(data: unknown, fallback: string): string {
+  if (typeof data === 'string' && data.trim()) return data;
+  if (typeof data === 'object' && data && 'message' in data) {
+    const m = (data as { message: unknown }).message;
+    if (Array.isArray(m)) return m.map(String).join(', ');
+    if (typeof m === 'string') return m;
+  }
+  return fallback;
+}
+
+function humanizeError(status: number, raw: string): string {
+  const lower = raw.toLowerCase();
+  if (status === 401) {
+    if (
+      lower.includes('invalid credentials') ||
+      lower.includes('unauthorized') ||
+      lower === 'unauthorized'
+    ) {
+      return 'Неверный email или пароль';
+    }
+    if (lower.includes('token')) return 'Сессия истекла — войдите снова';
+    return raw || 'Нужна авторизация';
+  }
+  if (status === 403) {
+    if (lower.includes('forbidden') || !raw) {
+      return 'Недостаточно прав (нужен админ или куратор курса)';
+    }
+    return raw;
+  }
+  if (status === 404) {
+    if (lower.includes('user') || lower.includes('email')) {
+      return 'Пользователь с таким email не найден';
+    }
+    return raw || 'Не найдено';
+  }
+  if (status === 409) return raw || 'Конфликт данных';
+  if (status === 400) return raw || 'Некорректные данные';
+  if (status >= 500) return 'Ошибка сервера. Попробуйте позже';
+  return raw || `Ошибка запроса (${status})`;
+}
+
 type Opts = RequestInit & { json?: unknown; auth?: boolean };
 
 export async function api<T = unknown>(path: string, opts: Opts = {}): Promise<T> {
@@ -57,11 +108,8 @@ export async function api<T = unknown>(path: string, opts: Opts = {}): Promise<T
     }
   }
   if (!res.ok) {
-    const msg =
-      typeof data === 'object' && data && 'message' in data
-        ? String((data as { message: unknown }).message)
-        : res.statusText;
-    throw new Error(Array.isArray(msg) ? msg.join(', ') : msg);
+    const raw = extractMessage(data, res.statusText);
+    throw new ApiError(humanizeError(res.status, raw), res.status);
   }
   return data as T;
 }

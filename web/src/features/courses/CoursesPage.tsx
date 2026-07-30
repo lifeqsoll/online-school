@@ -12,23 +12,32 @@ type Course = {
   isPublished: boolean;
 };
 
-export function CoursesPage({ base }: { base: '/admin' | '/curator' }) {
+export function CoursesPage({
+  base,
+  managedOnly,
+}: {
+  base: '/admin' | '/curator';
+  managedOnly?: boolean;
+}) {
   const nav = useNavigate();
   const [open, setOpen] = useState(false);
   const q = useQuery({
-    queryKey: ['courses'],
-    queryFn: () => api<Course[]>('/courses'),
+    queryKey: ['courses', managedOnly ? 'managed' : 'all'],
+    queryFn: () =>
+      api<Course[]>(managedOnly ? '/courses?managedOnly=true' : '/courses'),
   });
 
   return (
     <div>
       <Space style={{ width: '100%', justifyContent: 'space-between', marginBottom: 16 }}>
         <Typography.Title level={4} style={{ margin: 0 }}>
-          Курсы
+          {managedOnly ? 'Мои курсы' : 'Все курсы'}
         </Typography.Title>
-        <Button type="primary" onClick={() => setOpen(true)}>
-          Создать курс
-        </Button>
+        {!managedOnly && (
+          <Button type="primary" onClick={() => setOpen(true)}>
+            Создать курс
+          </Button>
+        )}
       </Space>
       <Table
         rowKey="id"

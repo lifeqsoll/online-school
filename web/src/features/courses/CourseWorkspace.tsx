@@ -10,7 +10,7 @@ import {
   Modal,
   message,
 } from 'antd';
-import { useParams } from 'react-router-dom';
+import { useParams, useSearchParams } from 'react-router-dom';
 import { useState } from 'react';
 import { api } from '../../shared/api/client';
 import { AssignmentConstructor } from '../assignments/AssignmentConstructor';
@@ -19,6 +19,7 @@ import { CourseAnalytics } from '../analytics/CourseAnalytics';
 import { CourseStudents } from '../students/CourseStudents';
 import { AssignCurators } from '../users/AssignCurators';
 import { LeaderboardPanel } from '../xp/LeaderboardPanel';
+import { CourseCalendarTab } from '../schedule/CourseCalendarTab';
 
 type CourseDetail = {
   id: string;
@@ -38,6 +39,7 @@ export function CourseWorkspace({
   isAdmin: boolean;
 }) {
   const { courseId = '' } = useParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const qc = useQueryClient();
   const course = useQuery({
     queryKey: ['course', courseId],
@@ -47,6 +49,11 @@ export function CourseWorkspace({
 
   const [modOpen, setModOpen] = useState(false);
   const [lessonOpen, setLessonOpen] = useState<string | null>(null);
+
+  const activeTab = searchParams.get('tab') || 'content';
+  const setTab = (key: string) => {
+    setSearchParams({ tab: key }, { replace: true });
+  };
 
   const addModule = useMutation({
     mutationFn: (title: string) =>
@@ -146,6 +153,20 @@ export function CourseWorkspace({
       label: 'XP',
       children: <LeaderboardPanel courseId={courseId} />,
     },
+    {
+      key: 'calendar',
+      label: 'Календарь',
+      children: (
+        <CourseCalendarTab
+          courseId={courseId}
+          modules={course.data.modules.map((m) => ({
+            id: m.id,
+            title: m.title,
+            lessons: m.lessons,
+          }))}
+        />
+      ),
+    },
   ];
 
   if (isAdmin) {
@@ -161,7 +182,7 @@ export function CourseWorkspace({
       <Typography.Title level={4} style={{ marginTop: 0 }}>
         {course.data.title}
       </Typography.Title>
-      <Tabs items={tabs} />
+      <Tabs activeKey={activeTab} onChange={setTab} items={tabs} />
 
       <Modal title="Модуль" open={modOpen} onCancel={() => setModOpen(false)} footer={null}>
         <Form
