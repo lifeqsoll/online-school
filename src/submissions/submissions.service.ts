@@ -47,6 +47,17 @@ export class SubmissionsService {
       throw new ForbiddenException();
     }
 
+    const draft = await this.prisma.submission.findFirst({
+      where: {
+        assignmentId,
+        userId: user.id,
+        status: SubmissionStatus.IN_PROGRESS,
+      },
+      include: { answers: true },
+      orderBy: { attemptNo: 'desc' },
+    });
+    if (draft) return draft;
+
     const count = await this.prisma.submission.count({
       where: { assignmentId, userId: user.id },
     });

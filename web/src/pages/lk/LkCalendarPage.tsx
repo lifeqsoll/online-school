@@ -1,45 +1,30 @@
 import { useQuery } from '@tanstack/react-query';
 import { Typography } from 'antd';
 import dayjs from 'dayjs';
-import isoWeek from 'dayjs/plugin/isoWeek';
-import { useMemo, useState } from 'react';
 import { api } from '../../shared/api/client';
-import { CalendarView, type CalEvent } from '../../features/schedule/CalendarView';
-
-dayjs.extend(isoWeek);
+import {
+  WeekStripCalendar,
+  type CalEvent,
+} from '../../features/schedule/WeekStripCalendar';
 
 export function LkCalendarPage() {
-  const [mode, setMode] = useState<'week' | 'month'>('week');
-  const range = useMemo(() => {
-    if (mode === 'week') {
-      return {
-        from: dayjs().startOf('isoWeek').toISOString(),
-        to: dayjs().endOf('isoWeek').toISOString(),
-      };
-    }
-    const start = dayjs().startOf('month').startOf('isoWeek');
-    const end = dayjs().endOf('month').endOf('isoWeek');
-    return { from: start.toISOString(), to: end.toISOString() };
-  }, [mode]);
+  const from = dayjs().startOf('day').subtract(0, 'day').toISOString();
+  const to = dayjs().add(13, 'day').endOf('day').toISOString();
 
   const cal = useQuery({
-    queryKey: ['me-calendar', range.from, range.to],
+    queryKey: ['me-calendar', from, to],
     queryFn: () =>
       api<CalEvent[]>(
-        `/me/calendar?from=${encodeURIComponent(range.from)}&to=${encodeURIComponent(range.to)}`,
+        `/me/calendar?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`,
       ),
   });
 
   return (
-    <div>
-      <Typography.Title level={4} style={{ marginTop: 0 }}>
+    <div style={{ maxWidth: 1100 }}>
+      <Typography.Title level={3} style={{ marginTop: 0 }}>
         Календарь
       </Typography.Title>
-      <CalendarView
-        events={cal.data ?? []}
-        mode={mode}
-        onModeChange={setMode}
-      />
+      <WeekStripCalendar events={cal.data ?? []} daysCount={7} />
     </div>
   );
 }

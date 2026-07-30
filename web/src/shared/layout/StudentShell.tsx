@@ -1,30 +1,23 @@
-import { Layout, Menu, Typography, Button, Space } from 'antd';
+import { Layout, Button, Space, Typography, Progress } from 'antd';
 import {
   HomeOutlined,
   CalendarOutlined,
   BookOutlined,
+  FormOutlined,
   LogoutOutlined,
-  MenuFoldOutlined,
-  MenuUnfoldOutlined,
+  ReadOutlined,
 } from '@ant-design/icons';
 import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom';
-import { useEffect, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useAuth } from '../auth/AuthContext';
 import { api } from '../api/client';
 
 const { Header, Sider, Content } = Layout;
-const KEY = 'os_lk_sidebar_open';
 
 export function StudentShell() {
   const loc = useLocation();
   const nav = useNavigate();
   const { user, logout } = useAuth();
-  const [open, setOpen] = useState(() => localStorage.getItem(KEY) !== '0');
-
-  useEffect(() => {
-    localStorage.setItem(KEY, open ? '1' : '0');
-  }, [open]);
 
   const managed = useQuery({
     queryKey: ['courses', 'managed'],
@@ -32,10 +25,25 @@ export function StudentShell() {
     enabled: !!user && user.globalRole !== 'ADMIN',
   });
 
+  const enrollments = useQuery({
+    queryKey: ['me-enrollments'],
+    queryFn: () =>
+      api<Array<{ courseId: string }>>('/me/enrollments'),
+  });
+
+  const firstCourseId = enrollments.data?.[0]?.courseId;
+  const xp = useQuery({
+    queryKey: ['xp-me', firstCourseId],
+    queryFn: () =>
+      api<{ totalXp: number }>(`/xp/me?courseId=${firstCourseId}`),
+    enabled: !!firstCourseId,
+  });
+
   const items = [
-    { key: '/lk', icon: <HomeOutlined />, label: 'Главная' },
-    { key: '/lk/calendar', icon: <CalendarOutlined />, label: 'Календарь' },
-    { key: '/catalog', icon: <BookOutlined />, label: 'Каталог' },
+    { key: '/lk', icon: <HomeOutlined />, title: 'Главная' },
+    { key: '/lk/calendar', icon: <CalendarOutlined />, title: 'Календарь' },
+    { key: '/catalog', icon: <BookOutlined />, title: 'Каталог' },
+    { key: '/lk/homework', icon: <FormOutlined />, title: 'Домашки' },
   ];
 
   const selected =
@@ -51,83 +59,122 @@ export function StudentShell() {
         ? '/curator'
         : null;
 
+  const totalXp = xp.data?.totalXp ?? 0;
+  const barMax = Math.max(100, Math.ceil((totalXp + 1) / 100) * 100);
+
   return (
-    <Layout className="min-h-full">
+    <Layout className="min-h-full" style={{ background: '#f3f4f6' }}>
       <Sider
-        collapsible
-        collapsed={!open}
-        collapsedWidth={0}
-        width={220}
-        trigger={null}
+        width={72}
         style={{
           background: '#fff',
-          borderRight: open ? '1px solid var(--border)' : 'none',
-          overflow: 'hidden',
+          borderRight: '1px solid #ebebeb',
+          paddingTop: 12,
         }}
       >
-        <div className="px-4 py-4 border-b border-[var(--border)]">
-          <Typography.Text strong>Олимпиадная школа</Typography.Text>
+        <div style={{ textAlign: 'center', marginBottom: 16 }}>
+          <div
+            style={{
+              width: 36,
+              height: 36,
+              margin: '0 auto',
+              borderRadius: 12,
+              background: 'var(--accent)',
+              color: '#fff',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              fontWeight: 700,
+            }}
+          >
+            О
+          </div>
         </div>
-        <Menu
-          mode="inline"
-          selectedKeys={[selected]}
-          items={items.map((i) => ({
-            key: i.key,
-            icon: i.icon,
-            label: <Link to={i.key}>{i.label}</Link>,
-          }))}
-          style={{ borderInlineEnd: 0 }}
-        />
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8, alignItems: 'center' }}>
+          {items.map((i) => {
+            const active = selected === i.key;
+            return (
+              <Link
+                key={i.key}
+                to={i.key}
+                title={i.title}
+                style={{
+                  width: 44,
+                  height: 44,
+                  borderRadius: 12,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  background: active ? 'var(--accent-soft)' : 'transparent',
+                  color: active ? '#6b4fb8' : '#8c8c8c',
+                  fontSize: 18,
+                }}
+              >
+                {i.icon}
+              </Link>
+            );
+          })}
+        </div>
       </Sider>
-      <Layout>
+      <Layout style={{ background: 'transparent' }}>
         <Header
           style={{
-            background: '#fff',
-            borderBottom: '1px solid var(--border)',
+            background: 'transparent',
+            paddingInline: 24,
             display: 'flex',
-            justifyContent: 'space-between',
+            justifyContent: 'flex-end',
             alignItems: 'center',
-            paddingInline: 16,
+            height: 64,
           }}
         >
-          <Space>
-            <Button
-              type="text"
-              icon={open ? <MenuFoldOutlined /> : <MenuUnfoldOutlined />}
-              onClick={() => setOpen((v) => !v)}
-            />
-            <Typography.Text type="secondary">Личный кабинет</Typography.Text>
-          </Space>
-          <Space>
-            <Typography.Text>{user?.firstName || user?.email || user?.id}</Typography.Text>
+          <Space size="middle">
+            <Space size={6}>
+              <ReadOutlined style={{ color: '#faad14' }} />
+              <Typography.Text>{totalXp}</Typography.Text>
+            </Space>
+            <div style={{ width: 120 }}>
+              <Progress
+                percent={Math.min(100, Math.round((totalXp / barMax) * 100))}
+                size="small"
+                showInfo={false}
+                strokeColor="#73d13d"
+              />
+              <Typography.Text type="secondary" style={{ fontSize: 11 }}>
+                {totalXp} / {barMax}
+              </Typography.Text>
+            </div>
+            <div
+              style={{
+                width: 36,
+                height: 36,
+                borderRadius: '50%',
+                background: 'var(--accent)',
+                color: '#fff',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                fontWeight: 700,
+              }}
+            >
+              {(user?.firstName || user?.email || 'Я')[0]?.toUpperCase()}
+            </div>
             {staffPath ? (
               <Button type="link" onClick={() => nav(staffPath)}>
-                Панель staff
+                Staff
               </Button>
             ) : null}
             <Button
+              type="text"
               icon={<LogoutOutlined />}
               onClick={async () => {
                 await logout();
                 nav('/');
               }}
-            >
-              Выйти
-            </Button>
+            />
           </Space>
         </Header>
-        <Content style={{ padding: 24, background: 'var(--surface)' }}>
-          <div
-            style={{
-              background: '#fff',
-              borderRadius: 8,
-              border: '1px solid var(--border)',
-              padding: 20,
-              minHeight: '70vh',
-            }}
-          >
-            <Outlet />
-          </div>
+        <Content style={{ padding: '0 24px 24px' }}>
+          <Outlet />
         </Content>
       </Layout>
     </Layout>
