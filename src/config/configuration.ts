@@ -1,0 +1,16 @@
+export default () => ({
+  nodeEnv: process.env.NODE_ENV ?? 'development',
+  port: parseInt(process.env.PORT ?? '3000', 10),
+  corsOrigin: process.env.CORS_ORIGIN ?? 'http://localhost:3000',
+  databaseUrl: process.env.DATABASE_URL,
+  redisUrl: process.env.REDIS_URL,
+  jwtAccessSecret: process.env.JWT_ACCESS_SECRET,
+  encryptionKey: process.env.ENCRYPTION_KEY,
+  emailHmacKey: process.env.EMAIL_HMAC_KEY,
+  adminEmail: process.env.ADMIN_EMAIL,
+  adminPassword: process.env.ADMIN_PASSWORD,
+  devExposeResetToken: process.env.DEV_EXPOSE_RESET_TOKEN === 'true',
+  jwtAccessTtl: '15m',
+  refreshTtlSeconds: 60 * 60 * 24 * 7,
+  passwordResetTtlMinutes: 45,
+});

@@ -1,0 +1,139 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum GlobalRole {
+  STUDENT
+  ADMIN
+}
+
+enum MembershipRole {
+  CURATOR
+}
+
+enum EnrollmentStatus {
+  ACTIVE
+  SUSPENDED
+  COMPLETED
+}
+
+enum AuditAction {
+  LOGIN
+  LOGOUT
+  REFRESH
+  IMPERSONATE_START
+  IMPERSONATE_STOP
+  USER_CREATE
+  USER_UPDATE
+  PASSWORD_CHANGE
+  PASSWORD_RESET_REQUEST
+  PASSWORD_RESET_COMPLETE
+}
+
+model User {
+  id              String    @id @default(cuid())
+  emailEnc        String
+  emailHash       String    @unique
+  passwordHash    String
+  firstNameEnc    String?
+  lastNameEnc     String?
+  globalRole      GlobalRole @default(STUDENT)
+  emailVerifiedAt DateTime?
+  isActive        Boolean   @default(true)
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  memberships         CourseMembership[]
+  enrollments         Enrollment[]
+  auditLogs           AuditLog[]              @relation("ActorLogs")
+  auditAsTarget       AuditLog[]              @relation("TargetLogs")
+  verificationCodes   EmailVerificationCode[]
+  passwordResetTokens PasswordResetToken[]
+}
+
+model EmailVerificationCode {
+  id         String    @id @default(cuid())
+  userId     String
+  codeHash   String
+  expiresAt  DateTime
+  consumedAt DateTime?
+  createdAt  DateTime  @default(now())
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model PasswordResetToken {
+  id         String    @id @default(cuid())
+  userId     String
+  tokenHash  String
+  expiresAt  DateTime
+  consumedAt DateTime?
+  createdAt  DateTime  @default(now())
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([tokenHash])
+}
+
+model Course {
+  id          String   @id @default(cuid())
+  title       String
+  slug        String   @unique
+  description String?
+  isPublished Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  memberships CourseMembership[]
+  enrollments Enrollment[]
+}
+
+model CourseMembership {
+  id        String         @id @default(cuid())
+  courseId  String
+  userId    String
+  role      MembershipRole
+  createdAt DateTime       @default(now())
+
+  course Course @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([courseId, userId])
+  @@index([userId])
+}
+
+model Enrollment {
+  id        String           @id @default(cuid())
+  courseId  String
+  userId    String
+  status    EnrollmentStatus @default(ACTIVE)
+  createdAt DateTime         @default(now())
+
+  course Course @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([courseId, userId])
+  @@index([userId])
+}
+
+model AuditLog {
+  id        String      @id @default(cuid())
+  actorId   String?
+  targetId  String?
+  action    AuditAction
+  ip        String?
+  userAgent String?
+  meta      Json?
+  createdAt DateTime    @default(now())
+
+  actor  User? @relation("ActorLogs", fields: [actorId], references: [id], onDelete: SetNull)
+  target User? @relation("TargetLogs", fields: [targetId], references: [id], onDelete: SetNull)
+
+  @@index([actorId, createdAt])
+  @@index([action, createdAt])
+}
