@@ -6,8 +6,10 @@ import {
 } from '@nestjs/common';
 import {
   AuditAction,
+  AssignmentResponseMode,
   QuestionType,
   ShortMatch,
+  StoredFileOwnerType,
   SubmissionStatus,
 } from '@prisma/client';
 import { AuditService } from '../audit/audit.service';
@@ -124,6 +126,25 @@ export class SubmissionsService {
       where: { id: submission.assignmentId },
       include: { questions: true },
     });
+
+    const mode = assignment.responseMode;
+    const needsFile =
+      mode === AssignmentResponseMode.FILE ||
+      mode === AssignmentResponseMode.QUIZ_AND_FILE;
+    if (needsFile) {
+      const fileCount = await this.prisma.storedFile.count({
+        where: {
+          ownerType: StoredFileOwnerType.SUBMISSION_ATTACHMENT,
+          ownerId: submissionId,
+        },
+      });
+      if (fileCount < 1) {
+        throw new BadRequestException(
+          'At least one PNG/PDF attachment is required',
+        );
+      }
+    }
+
     const answers = await this.prisma.answer.findMany({
       where: { submissionId },
     });
@@ -132,6 +153,8 @@ export class SubmissionsService {
     let earned = 0;
     let total = 0;
     let hasOpen = false;
+    // File answers always need manual review (like OPEN)
+    if (needsFile) hasOpen = true;
 
     for (const q of assignment.questions) {
       total += q.points;
