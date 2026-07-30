@@ -61,12 +61,6 @@ export class SubmissionsService {
     const count = await this.prisma.submission.count({
       where: { assignmentId, userId: user.id },
     });
-    if (
-      assignment.maxAttempts != null &&
-      count >= assignment.maxAttempts
-    ) {
-      throw new BadRequestException('Max attempts reached');
-    }
 
     return this.prisma.submission.create({
       data: {

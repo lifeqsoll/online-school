@@ -29,10 +29,10 @@ export function PublicShell() {
           </Typography.Text>
         </Link>
         <Space size="middle">
-          <Link to="/catalog">Каталог</Link>
+          <Button onClick={() => nav('/catalog')}>Каталог</Button>
           {user ? (
             <>
-              <Button type="link" onClick={() => nav('/lk')}>
+              <Button type="primary" onClick={() => nav('/lk')}>
                 Кабинет
               </Button>
               <Button

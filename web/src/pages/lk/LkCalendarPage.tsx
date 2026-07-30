@@ -1,15 +1,18 @@
 import { useQuery } from '@tanstack/react-query';
 import { Typography } from 'antd';
 import dayjs from 'dayjs';
+import isoWeek from 'dayjs/plugin/isoWeek';
 import { api } from '../../shared/api/client';
 import {
-  WeekStripCalendar,
+  MonthGridCalendar,
   type CalEvent,
 } from '../../features/schedule/WeekStripCalendar';
 
+dayjs.extend(isoWeek);
+
 export function LkCalendarPage() {
-  const from = dayjs().startOf('day').subtract(0, 'day').toISOString();
-  const to = dayjs().add(13, 'day').endOf('day').toISOString();
+  const from = dayjs().subtract(2, 'month').startOf('month').startOf('isoWeek').toISOString();
+  const to = dayjs().add(2, 'month').endOf('month').endOf('isoWeek').toISOString();
 
   const cal = useQuery({
     queryKey: ['me-calendar', from, to],
@@ -24,7 +27,7 @@ export function LkCalendarPage() {
       <Typography.Title level={3} style={{ marginTop: 0 }}>
         Календарь
       </Typography.Title>
-      <WeekStripCalendar events={cal.data ?? []} daysCount={7} />
+      <MonthGridCalendar events={cal.data ?? []} />
     </div>
   );
 }

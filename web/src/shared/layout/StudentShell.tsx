@@ -2,7 +2,6 @@ import { Layout, Button, Space, Typography, Progress } from 'antd';
 import {
   HomeOutlined,
   CalendarOutlined,
-  BookOutlined,
   FormOutlined,
   LogoutOutlined,
   ReadOutlined,
@@ -27,8 +26,7 @@ export function StudentShell() {
 
   const enrollments = useQuery({
     queryKey: ['me-enrollments'],
-    queryFn: () =>
-      api<Array<{ courseId: string }>>('/me/enrollments'),
+    queryFn: () => api<Array<{ courseId: string }>>('/me/enrollments'),
   });
 
   const firstCourseId = enrollments.data?.[0]?.courseId;
@@ -42,7 +40,6 @@ export function StudentShell() {
   const items = [
     { key: '/lk', icon: <HomeOutlined />, title: 'Главная' },
     { key: '/lk/calendar', icon: <CalendarOutlined />, title: 'Календарь' },
-    { key: '/catalog', icon: <BookOutlined />, title: 'Каталог' },
     { key: '/lk/homework', icon: <FormOutlined />, title: 'Домашки' },
   ];
 
@@ -63,7 +60,7 @@ export function StudentShell() {
   const barMax = Math.max(100, Math.ceil((totalXp + 1) / 100) * 100);
 
   return (
-    <Layout className="min-h-full" style={{ background: '#f3f4f6' }}>
+    <Layout style={{ minHeight: '100%', background: '#f3f4f6', alignItems: 'stretch' }}>
       <Sider
         width={72}
         style={{
@@ -159,7 +156,10 @@ export function StudentShell() {
               {(user?.firstName || user?.email || 'Я')[0]?.toUpperCase()}
             </div>
             {staffPath ? (
-              <Button type="link" onClick={() => nav(staffPath)}>
+              <Button
+                type="primary"
+                onClick={() => window.open(staffPath, '_blank', 'noopener,noreferrer')}
+              >
                 Staff
               </Button>
             ) : null}
@@ -173,7 +173,7 @@ export function StudentShell() {
             />
           </Space>
         </Header>
-        <Content style={{ padding: '0 24px 24px' }}>
+        <Content style={{ padding: '0 24px 24px', height: 'auto' }}>
           <Outlet />
         </Content>
       </Layout>

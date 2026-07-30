@@ -57,7 +57,7 @@ export function AssignmentConstructor({
   const [moduleId, setModuleId] = useState<string>();
   const [title, setTitle] = useState('Новое задание');
   const [maxXp, setMaxXp] = useState(100);
-  const [maxAttempts, setMaxAttempts] = useState<number | null>(3);
+  const [maxAttempts, setMaxAttempts] = useState<number | null>(null);
   const [published, setPublished] = useState(true);
   const [questions, setQuestions] = useState<DraftQuestion[]>([
     {

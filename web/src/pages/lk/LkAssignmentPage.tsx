@@ -3,7 +3,6 @@ import {
   Button,
   Checkbox,
   Input,
-  Radio,
   Space,
   Spin,
   Typography,
@@ -27,6 +26,7 @@ type Assignment = {
   title: string;
   courseId: string;
   maxXp: number;
+  maxAttempts?: number | null;
   description?: string | null;
   questions: Question[];
 };
@@ -50,12 +50,21 @@ type Submission = {
 
 type AnswersMap = Record<string, unknown>;
 
+function normalizeOptions(
+  options: Question['options'],
+): { id: string; text: string }[] {
+  if (!options) return [];
+  if (Array.isArray(options)) return options;
+  return [];
+}
+
 export function LkAssignmentPage() {
   const { assignmentId = '' } = useParams();
   const [search, setSearch] = useSearchParams();
   const nav = useNavigate();
   const qc = useQueryClient();
-  const showResults = search.get('view') === 'results';
+  const retry = search.get('retry') === '1';
+  const showResultsParam = search.get('view') === 'results';
 
   const assignment = useQuery({
     queryKey: ['assignment', assignmentId],
@@ -72,7 +81,7 @@ export function LkAssignmentPage() {
   const [submissionId, setSubmissionId] = useState<string | null>(null);
   const [answers, setAnswers] = useState<AnswersMap>({});
   const [qIndex, setQIndex] = useState(0);
-  const [ready, setReady] = useState(false);
+  const [phase, setPhase] = useState<'boot' | 'take' | 'results'>('boot');
 
   const draft = useMemo(
     () => mine.data?.find((s) => s.status === 'IN_PROGRESS'),
@@ -84,81 +93,110 @@ export function LkAssignmentPage() {
   }, [mine.data]);
 
   useEffect(() => {
-    if (!assignment.data || !mine.data || ready) return;
+    if (!assignment.data || mine.data === undefined) return;
     let cancelled = false;
 
     (async () => {
       try {
-        if (showResults && latestDone) {
+        if (showResultsParam && latestDone && !retry) {
+          if (cancelled) return;
           setSubmissionId(latestDone.id);
-          setReady(true);
+          setPhase('results');
           return;
         }
-        if (draft) {
+
+        if (draft && !retry) {
+          if (cancelled) return;
           setSubmissionId(draft.id);
           const map: AnswersMap = {};
           for (const a of draft.answers) map[a.questionId] = a.value;
           setAnswers(map);
-          setReady(true);
+          setPhase('take');
           return;
         }
-        if (latestDone && search.get('retry') !== '1') {
+
+        if (latestDone && !retry && !showResultsParam) {
+          if (cancelled) return;
           setSubmissionId(latestDone.id);
-          setSearch({ view: 'results' });
-          setReady(true);
+          setPhase('results');
+          setSearch({ view: 'results' }, { replace: true });
           return;
         }
+
+        // New attempt (first open or retry)
         const created = await api<Submission>(
           `/assignments/${assignmentId}/submissions`,
           { method: 'POST' },
         );
         if (cancelled) return;
+        if (created.status !== 'IN_PROGRESS') {
+          // Safety: never edit a finished submission
+          setSubmissionId(created.id);
+          setPhase('results');
+          setSearch({ view: 'results' }, { replace: true });
+          return;
+        }
         setSubmissionId(created.id);
         const map: AnswersMap = {};
         for (const a of created.answers ?? []) map[a.questionId] = a.value;
         setAnswers(map);
-        setReady(true);
+        setPhase('take');
+        if (retry) setSearch({}, { replace: true });
       } catch (e) {
-        if (e instanceof ApiError && e.message.includes('Max attempts')) {
+        if (e instanceof ApiError && /max attempts|попыт/i.test(e.message)) {
           if (latestDone) {
-            setSearch({ view: 'results' });
             setSubmissionId(latestDone.id);
-            setReady(true);
+            setPhase('results');
+            setSearch({ view: 'results' }, { replace: true });
+            message.warning('Лимит попыток исчерпан — показаны последние результаты');
             return;
           }
         }
         message.error(e instanceof Error ? e.message : 'Не удалось открыть попытку');
+        setPhase('results');
       }
     })();
 
     return () => {
       cancelled = true;
     };
-  }, [
-    assignment.data,
-    mine.data,
-    draft,
-    latestDone,
-    assignmentId,
-    ready,
-    showResults,
-    setSearch,
-    search,
-  ]);
+    // Re-run when assignment/mine/retry/view change — not on every answer keystroke
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [assignment.data, mine.data, assignmentId, retry, showResultsParam]);
+
+  const ensureDraftId = async (): Promise<string> => {
+    if (submissionId && phase === 'take') {
+      const current = mine.data?.find((s) => s.id === submissionId);
+      if (!current || current.status === 'IN_PROGRESS') return submissionId;
+    }
+    if (draft) return draft.id;
+    const created = await api<Submission>(
+      `/assignments/${assignmentId}/submissions`,
+      { method: 'POST' },
+    );
+    if (created.status !== 'IN_PROGRESS') {
+      throw new Error('Нет редактируемого черновика — начните новую попытку');
+    }
+    setSubmissionId(created.id);
+    setPhase('take');
+    await qc.invalidateQueries({ queryKey: ['submissions-me', assignmentId] });
+    return created.id;
+  };
 
   const save = useMutation({
     mutationFn: async () => {
-      if (!submissionId) throw new Error('Нет черновика');
+      const id = await ensureDraftId();
       const payload = Object.entries(answers).map(([questionId, value]) => ({
         questionId,
         value,
       }));
-      return api<Submission>(`/submissions/${submissionId}`, {
+      return api<Submission>(`/submissions/${id}`, {
         method: 'PATCH',
         json: { answers: payload },
       });
     },
-    onSuccess: () => {
+    onSuccess: (s) => {
+      setSubmissionId(s.id);
       message.success('Сохранено — можно продолжить позже');
       qc.invalidateQueries({ queryKey: ['submissions-me', assignmentId] });
     },
@@ -167,40 +205,50 @@ export function LkAssignmentPage() {
 
   const submit = useMutation({
     mutationFn: async () => {
-      if (!submissionId) throw new Error('Нет черновика');
+      const id = await ensureDraftId();
       const payload = Object.entries(answers).map(([questionId, value]) => ({
         questionId,
         value,
       }));
-      await api(`/submissions/${submissionId}`, {
+      await api(`/submissions/${id}`, {
         method: 'PATCH',
         json: { answers: payload },
       });
-      return api<Submission>(`/submissions/${submissionId}/submit`, {
-        method: 'POST',
-      });
+      return api<Submission>(`/submissions/${id}/submit`, { method: 'POST' });
     },
-    onSuccess: async () => {
+    onSuccess: async (s) => {
       message.success('Работа сдана');
+      setSubmissionId(s.id);
       await qc.invalidateQueries({ queryKey: ['submissions-me', assignmentId] });
-      setReady(false);
-      setSearch({ view: 'results' });
+      setPhase('results');
+      setSearch({ view: 'results' }, { replace: true });
     },
     onError: (e: Error) => message.error(e.message),
   });
 
-  if (!assignment.data || !ready) {
+  const startRetry = () => {
+    setAnswers({});
+    setQIndex(0);
+    setSubmissionId(null);
+    setPhase('boot');
+    setSearch({ retry: '1' });
+  };
+
+  if (!assignment.data || phase === 'boot') {
     return <Spin style={{ margin: 48 }} />;
   }
 
-  const questions = assignment.data.questions;
+  const questions = assignment.data.questions.map((q) => ({
+    ...q,
+    options: normalizeOptions(q.options),
+  }));
   const current = questions[qIndex];
   const resultSub =
-    showResults
+    phase === 'results'
       ? (mine.data?.find((s) => s.id === submissionId) ?? latestDone)
       : null;
 
-  if (showResults && resultSub) {
+  if (phase === 'results' && resultSub) {
     const byQ = new Map(resultSub.answers.map((a) => [a.questionId, a]));
     const totalPts = questions.reduce((s, q) => s + q.points, 0);
     const earned = resultSub.scorePoints ?? 0;
@@ -210,40 +258,15 @@ export function LkAssignmentPage() {
         <button type="button" onClick={() => nav(-1)} style={backBtn}>
           <ArrowLeftOutlined /> Назад
         </button>
-        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', margin: '16px 0' }}>
-          {questions.map((q, i) => {
-            const a = byQ.get(q.id);
-            const ok = a?.isCorrect;
-            return (
-              <button
-                key={q.id}
-                type="button"
-                onClick={() => setQIndex(i)}
-                style={{
-                  width: 36,
-                  height: 36,
-                  borderRadius: '50%',
-                  border: `2px solid ${ok === false ? '#ff7875' : '#73d13d'}`,
-                  background: i === qIndex ? 'var(--accent)' : '#fff',
-                  color: i === qIndex ? '#fff' : '#333',
-                  cursor: 'pointer',
-                  fontWeight: 600,
-                }}
-              >
-                {i + 1}
-              </button>
-            );
-          })}
-        </div>
-
-        <Typography.Title level={2}>Результаты</Typography.Title>
-        <Space style={{ marginBottom: 16 }}>
+        <Typography.Title level={2} style={{ marginTop: 16 }}>
+          Результаты
+        </Typography.Title>
+        <Space style={{ marginBottom: 16 }} wrap>
           <Typography.Text type="secondary">
-            <ClockCircleOutlined /> Статус: {statusLabel(resultSub.status)}
+            <ClockCircleOutlined /> {statusLabel(resultSub.status)}
           </Typography.Text>
           <Typography.Text>
-            <StarFilled style={{ color: '#faad14' }} /> Получено{' '}
-            {resultSub.scoreXp ?? 0} XP
+            <StarFilled style={{ color: '#faad14' }} /> {resultSub.scoreXp ?? 0} XP
           </Typography.Text>
         </Space>
 
@@ -251,9 +274,7 @@ export function LkAssignmentPage() {
           <Typography.Text type="secondary">Тестирование</Typography.Text>
           <Typography.Title level={4} style={{ margin: '8px 0' }}>
             Баллы: {earned} из {totalPts}
-            {totalPts
-              ? ` / ${Math.round((earned / totalPts) * 100)}%`
-              : ''}
+            {totalPts ? ` / ${Math.round((earned / totalPts) * 100)}%` : ''}
           </Typography.Title>
         </div>
 
@@ -303,19 +324,9 @@ export function LkAssignmentPage() {
           );
         })}
 
-        {latestDone ? (
-          <Button
-            type="link"
-            onClick={() => {
-              setSearch({ retry: '1' });
-              setReady(false);
-              setAnswers({});
-              setQIndex(0);
-            }}
-          >
-            Новая попытка
-          </Button>
-        ) : null}
+        <Button type="primary" style={{ marginTop: 24 }} onClick={startRetry}>
+          Пройти снова
+        </Button>
       </div>
     );
   }
@@ -413,13 +424,16 @@ export function LkAssignmentPage() {
           Сдать работу
         </Button>
         {latestDone ? (
-          <Button type="link" onClick={() => setSearch({ view: 'results' })}>
+          <Button type="link" onClick={() => {
+            setPhase('results');
+            setSearch({ view: 'results' });
+          }}>
             Результаты
           </Button>
         ) : null}
       </Space>
       <Typography.Paragraph type="secondary" style={{ marginTop: 12 }}>
-        «Сохранить» записывает черновик на сервер — после выхода ответы останутся.
+        «Сохранить» пишет черновик на сервер — после выхода ответы останутся.
       </Typography.Paragraph>
     </div>
   );
@@ -434,23 +448,12 @@ function ChoiceInput({
   value: unknown;
   onChange: (v: string[]) => void;
 }) {
-  const options = question.options ?? [];
+  const options = normalizeOptions(question.options);
   const selected = Array.isArray(value) ? (value as string[]) : value ? [String(value)] : [];
-  const multi = true;
 
-  if (!multi) {
+  if (!options.length) {
     return (
-      <Radio.Group
-        value={selected[0]}
-        onChange={(e) => onChange([e.target.value])}
-        style={{ display: 'flex', flexDirection: 'column', gap: 8 }}
-      >
-        {options.map((o) => (
-          <Radio key={o.id} value={o.id}>
-            {o.text}
-          </Radio>
-        ))}
-      </Radio.Group>
+      <Typography.Text type="secondary">Варианты ответа не заданы</Typography.Text>
     );
   }
 
@@ -474,7 +477,7 @@ function formatAnswer(q: Question, value: unknown) {
   if (q.type === 'CHOICE') {
     const ids = Array.isArray(value) ? (value as string[]) : [String(value)];
     const labels = ids.map(
-      (id) => q.options?.find((o) => o.id === id)?.text ?? id,
+      (id) => normalizeOptions(q.options).find((o) => o.id === id)?.text ?? id,
     );
     return labels.join(', ');
   }

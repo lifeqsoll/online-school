@@ -2,15 +2,12 @@ import { useQuery } from '@tanstack/react-query';
 import { Typography } from 'antd';
 import { StarFilled } from '@ant-design/icons';
 import dayjs from 'dayjs';
-import isoWeek from 'dayjs/plugin/isoWeek';
 import { Link } from 'react-router-dom';
 import { api } from '../../shared/api/client';
 import {
-  WeekStripCalendar,
+  MonthGridCalendar,
   type CalEvent,
 } from '../../features/schedule/WeekStripCalendar';
-
-dayjs.extend(isoWeek);
 
 type Enrollment = {
   courseId: string;
@@ -18,8 +15,8 @@ type Enrollment = {
 };
 
 export function LkHomePage() {
-  const from = dayjs().startOf('day').toISOString();
-  const to = dayjs().add(6, 'day').endOf('day').toISOString();
+  const from = dayjs().startOf('month').startOf('isoWeek').toISOString();
+  const to = dayjs().endOf('month').endOf('isoWeek').toISOString();
 
   const cal = useQuery({
     queryKey: ['me-calendar', from, to],
@@ -36,23 +33,20 @@ export function LkHomePage() {
 
   return (
     <div style={{ maxWidth: 1100 }}>
-      <WeekStripCalendar events={cal.data ?? []} daysCount={7} />
+      <MonthGridCalendar events={cal.data ?? []} />
 
       <div
         style={{
           display: 'flex',
           justifyContent: 'space-between',
           alignItems: 'baseline',
-          marginTop: 28,
+          marginTop: 24,
           marginBottom: 12,
         }}
       >
         <Typography.Title level={3} style={{ margin: 0 }}>
           Продолжить обучение
         </Typography.Title>
-        <Link to="/catalog" style={{ color: '#8c8c8c' }}>
-          Мои курсы ›
-        </Link>
       </div>
 
       <div
@@ -74,7 +68,6 @@ export function LkHomePage() {
                 border: '1px solid #ebebeb',
                 borderRadius: 14,
                 padding: 16,
-                minHeight: 110,
               }}
             >
               <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
@@ -97,7 +90,7 @@ export function LkHomePage() {
         ))}
         {!enrollments.data?.length ? (
           <Typography.Text type="secondary">
-            Пока нет курсов — загляните в <Link to="/catalog">каталог</Link>
+            Пока нет курсов — запишитесь через публичный каталог на сайте
           </Typography.Text>
         ) : null}
       </div>
