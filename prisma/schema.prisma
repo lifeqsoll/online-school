@@ -21,6 +21,36 @@ enum EnrollmentStatus {
   COMPLETED
 }
 
+enum EnrollmentSource {
+  FREE
+  PAYMENT
+  GRANT
+}
+
+enum LessonType {
+  VIDEO
+  TEXT
+  MIXED
+}
+
+enum VideoSource {
+  UPLOADED
+  EXTERNAL_URL
+}
+
+enum PaymentStatus {
+  PENDING
+  SUCCEEDED
+  FAILED
+  CANCELED
+  REFUNDED
+}
+
+enum PaymentProvider {
+  MOCK
+  YOOKASSA
+}
+
 enum AuditAction {
   LOGIN
   LOGOUT
@@ -32,23 +62,31 @@ enum AuditAction {
   PASSWORD_CHANGE
   PASSWORD_RESET_REQUEST
   PASSWORD_RESET_COMPLETE
+  COURSE_CREATE
+  COURSE_UPDATE
+  ENROLL
+  PAYMENT_CREATE
+  PAYMENT_SUCCEEDED
+  GRANT_ENROLL
+  LESSON_UPDATE
 }
 
 model User {
-  id              String    @id @default(cuid())
+  id              String     @id @default(cuid())
   emailEnc        String
-  emailHash       String    @unique
+  emailHash       String     @unique
   passwordHash    String
   firstNameEnc    String?
   lastNameEnc     String?
   globalRole      GlobalRole @default(STUDENT)
   emailVerifiedAt DateTime?
-  isActive        Boolean   @default(true)
-  createdAt       DateTime  @default(now())
-  updatedAt       DateTime  @updatedAt
+  isActive        Boolean    @default(true)
+  createdAt       DateTime   @default(now())
+  updatedAt       DateTime   @updatedAt
 
   memberships         CourseMembership[]
   enrollments         Enrollment[]
+  payments            Payment[]
   auditLogs           AuditLog[]              @relation("ActorLogs")
   auditAsTarget       AuditLog[]              @relation("TargetLogs")
   verificationCodes   EmailVerificationCode[]
@@ -86,11 +124,50 @@ model Course {
   slug        String   @unique
   description String?
   isPublished Boolean  @default(false)
+  priceCents  Int      @default(0)
+  currency    String   @default("RUB")
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
+  modules     CourseModule[]
   memberships CourseMembership[]
   enrollments Enrollment[]
+  payments    Payment[]
+}
+
+model CourseModule {
+  id          String   @id @default(cuid())
+  courseId    String
+  title       String
+  description String?
+  sortOrder   Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  course  Course   @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  lessons Lesson[]
+
+  @@index([courseId, sortOrder])
+}
+
+model Lesson {
+  id          String       @id @default(cuid())
+  moduleId    String
+  title       String
+  type        LessonType   @default(VIDEO)
+  content     String?
+  videoSource VideoSource?
+  videoUrl    String?
+  storageKey  String?
+  durationSec Int?
+  sortOrder   Int          @default(0)
+  isPublished Boolean      @default(false)
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+
+  module CourseModule @relation(fields: [moduleId], references: [id], onDelete: Cascade)
+
+  @@index([moduleId, sortOrder])
 }
 
 model CourseMembership {
@@ -112,13 +189,39 @@ model Enrollment {
   courseId  String
   userId    String
   status    EnrollmentStatus @default(ACTIVE)
+  source    EnrollmentSource @default(FREE)
+  grantedBy String?
+  paymentId String?          @unique
   createdAt DateTime         @default(now())
 
-  course Course @relation(fields: [courseId], references: [id], onDelete: Cascade)
-  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  course  Course   @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  user    User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  payment Payment? @relation(fields: [paymentId], references: [id])
 
   @@unique([courseId, userId])
   @@index([userId])
+}
+
+model Payment {
+  id                String          @id @default(cuid())
+  courseId          String
+  userId            String
+  amountCents       Int
+  currency          String          @default("RUB")
+  status            PaymentStatus   @default(PENDING)
+  provider          PaymentProvider @default(MOCK)
+  providerPaymentId String?
+  confirmationUrl   String?
+  metadata          Json?
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
+
+  course     Course      @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  user       User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  enrollment Enrollment?
+
+  @@index([userId, status])
+  @@index([providerPaymentId])
 }
 
 model AuditLog {
