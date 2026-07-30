@@ -12,7 +12,9 @@ import {
 } from 'antd';
 import { useParams, useSearchParams } from 'react-router-dom';
 import { useState } from 'react';
+import { AnimatePresence, motion } from 'framer-motion';
 import { api } from '../../shared/api/client';
+import { easeOutExpo, tabPanelVariants } from '../../shared/motion';
 import { AssignmentConstructor } from '../assignments/AssignmentConstructor';
 import { ReviewQueue } from '../assignments/ReviewQueue';
 import { CourseAnalytics } from '../analytics/CourseAnalytics';
@@ -20,6 +22,7 @@ import { CourseStudents } from '../students/CourseStudents';
 import { AssignCurators } from '../users/AssignCurators';
 import { LeaderboardPanel } from '../xp/LeaderboardPanel';
 import { CourseCalendarTab } from '../schedule/CourseCalendarTab';
+import { LessonEditPanel } from './LessonEditPanel';
 
 type CourseDetail = {
   id: string;
@@ -27,7 +30,15 @@ type CourseDetail = {
   modules: Array<{
     id: string;
     title: string;
-    lessons: Array<{ id: string; title: string; isPublished: boolean }>;
+    lessons: Array<{
+      id: string;
+      title: string;
+      type: string;
+      content?: string | null;
+      isPublished: boolean;
+      videoUrl?: string | null;
+      videoSource?: string | null;
+    }>;
   }>;
 };
 
@@ -49,6 +60,9 @@ export function CourseWorkspace({
 
   const [modOpen, setModOpen] = useState(false);
   const [lessonOpen, setLessonOpen] = useState<string | null>(null);
+  const [editLesson, setEditLesson] = useState<
+    CourseDetail['modules'][0]['lessons'][0] | null
+  >(null);
 
   const activeTab = searchParams.get('tab') || 'content';
   const setTab = (key: string) => {
@@ -103,13 +117,24 @@ export function CourseWorkspace({
                 size="small"
                 dataSource={m.lessons}
                 renderItem={(l) => (
-                  <List.Item>
+                  <List.Item
+                    actions={[
+                      <Button
+                        key="edit"
+                        type="link"
+                        size="small"
+                        onClick={() => setEditLesson(l)}
+                      >
+                        Редактировать
+                      </Button>,
+                    ]}
+                  >
                     {l.title}{' '}
                     {l.isPublished ? (
                       <Typography.Text type="success">· published</Typography.Text>
                     ) : null}
                     <Typography.Text type="secondary" style={{ marginLeft: 8 }}>
-                      {l.id}
+                      {l.type}
                     </Typography.Text>
                   </List.Item>
                 )}
@@ -182,7 +207,23 @@ export function CourseWorkspace({
       <Typography.Title level={4} style={{ marginTop: 0 }}>
         {course.data.title}
       </Typography.Title>
-      <Tabs activeKey={activeTab} onChange={setTab} items={tabs} />
+      <Tabs
+        activeKey={activeTab}
+        onChange={setTab}
+        items={tabs.map(({ key, label }) => ({ key, label }))}
+      />
+      <AnimatePresence mode="wait">
+        <motion.div
+          key={activeTab}
+          variants={tabPanelVariants}
+          initial="initial"
+          animate="animate"
+          exit="exit"
+          transition={{ duration: 0.28, ease: easeOutExpo }}
+        >
+          {tabs.find((t) => t.key === activeTab)?.children}
+        </motion.div>
+      </AnimatePresence>
 
       <Modal title="Модуль" open={modOpen} onCancel={() => setModOpen(false)} footer={null}>
         <Form
@@ -230,6 +271,24 @@ export function CourseWorkspace({
             Сохранить
           </Button>
         </Form>
+      </Modal>
+      <Modal
+        title="Редактирование урока"
+        open={!!editLesson}
+        onCancel={() => setEditLesson(null)}
+        footer={null}
+        width={640}
+        destroyOnClose
+      >
+        {editLesson ? (
+          <LessonEditPanel
+            lesson={editLesson}
+            onClose={() => {
+              setEditLesson(null);
+              qc.invalidateQueries({ queryKey: ['course', courseId] });
+            }}
+          />
+        ) : null}
       </Modal>
     </div>
   );
