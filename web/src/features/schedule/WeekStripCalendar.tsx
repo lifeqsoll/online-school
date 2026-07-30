@@ -5,6 +5,9 @@ import isoWeek from 'dayjs/plugin/isoWeek';
 import 'dayjs/locale/ru';
 import { useMemo, useState, type CSSProperties } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { AnimatePresence, motion } from 'framer-motion';
+import { easeOutExpo } from '../../shared/motion';
+import { courseColor } from '../../shared/schedule/courseColor';
 
 dayjs.extend(isoWeek);
 dayjs.locale('ru');
@@ -23,375 +26,392 @@ export type CalEvent = {
 
 type Props = {
   events: CalEvent[];
+  loading?: boolean;
 };
 
-/** Month grid: weeks × 7 days */
-export function MonthGridCalendar({ events }: Props) {
-  const nav = useNavigate();
-  const [month, setMonth] = useState(() => dayjs().startOf('month'));
-  const [selected, setSelected] = useState<CalEvent | null>(null);
+const WEEKDAYS = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'];
 
-  const days = useMemo(() => {
-    const start = month.startOf('month').startOf('isoWeek');
-    const end = month.endOf('month').endOf('isoWeek');
-    const out: Dayjs[] = [];
-    let d = start;
-    while (d.isBefore(end) || d.isSame(end, 'day')) {
-      out.push(d);
-      d = d.add(1, 'day');
-    }
-    return out;
-  }, [month]);
+function eventsOnDay(events: CalEvent[], day: Dayjs) {
+  return events.filter((e) => dayjs(e.startsAt).isSame(day, 'day'));
+}
 
-  const byDay = (d: Dayjs) =>
-    events.filter((e) => dayjs(e.startsAt).isSame(d, 'day'));
-
-  const weeks = useMemo(() => {
-    const rows: Dayjs[][] = [];
-    for (let i = 0; i < days.length; i += 7) rows.push(days.slice(i, i + 7));
-    return rows;
-  }, [days]);
-
+function EventChip({
+  event,
+  onClick,
+}: {
+  event: CalEvent;
+  onClick: () => void;
+}) {
+  const isLive = event.type === 'LIVE';
+  const colors = event.course?.id
+    ? courseColor(event.course.id)
+    : {
+        bg: isLive ? 'var(--accent-soft)' : '#fff7e6',
+        border: isLive ? 'var(--accent)' : '#faad14',
+        text: 'var(--fg)',
+      };
   return (
-    <div
+    <motion.button
+      type="button"
+      onClick={onClick}
+      whileHover={{ scale: 1.03, y: -1 }}
+      whileTap={{ scale: 0.97 }}
+      transition={{ duration: 0.18, ease: easeOutExpo }}
       style={{
-        background: '#fff',
-        borderRadius: 16,
-        border: '1px solid #ebebeb',
-        padding: 16,
+        display: 'block',
+        width: '100%',
+        textAlign: 'left',
+        border: 'none',
+        borderRadius: 6,
+        padding: '4px 6px',
+        marginBottom: 4,
+        cursor: 'pointer',
+        background: colors.bg,
+        borderLeft: `${isLive ? 4 : 3}px ${isLive ? 'solid' : 'dashed'} ${colors.border}`,
+        fontSize: 11,
+        lineHeight: 1.3,
+        color: colors.text,
       }}
     >
+      <div style={{ fontWeight: 600 }}>
+        {dayjs(event.startsAt).format('HH:mm')} · {isLive ? 'Урок' : 'Дедлайн'}
+      </div>
+      <div
+        style={{
+          opacity: 0.85,
+          overflow: 'hidden',
+          textOverflow: 'ellipsis',
+          whiteSpace: 'nowrap',
+        }}
+      >
+        {event.title}
+      </div>
+    </motion.button>
+  );
+}
+
+function EventModal({
+  event,
+  open,
+  onClose,
+}: {
+  event: CalEvent | null;
+  open: boolean;
+  onClose: () => void;
+}) {
+  const navigate = useNavigate();
+  if (!event) return null;
+  const isLive = event.type === 'LIVE';
+
+  return (
+    <Modal
+      open={open}
+      onCancel={onClose}
+      footer={null}
+      title={isLive ? 'Онлайн-урок' : 'Дедлайн ДЗ'}
+      destroyOnClose
+    >
+      <Typography.Title level={5} style={{ marginTop: 0 }}>
+        {event.title}
+      </Typography.Title>
+      {event.course && (
+        <Typography.Paragraph type="secondary" style={{ marginBottom: 8 }}>
+          Курс: {event.course.title}
+        </Typography.Paragraph>
+      )}
+      <Typography.Paragraph>
+        {dayjs(event.startsAt).format('D MMMM YYYY, HH:mm')}
+        {event.endsAt ? ` — ${dayjs(event.endsAt).format('HH:mm')}` : ''}
+      </Typography.Paragraph>
+      {isLive && event.meetingUrl && (
+        <a href={event.meetingUrl} target="_blank" rel="noreferrer">
+          Ссылка на встречу
+        </a>
+      )}
+      <div style={{ marginTop: 16, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+        {isLive && event.lessonId && event.course && (
+          <motion.button
+            type="button"
+            whileHover={{ scale: 1.03 }}
+            whileTap={{ scale: 0.97 }}
+            onClick={() => {
+              onClose();
+              navigate(`/lk/lessons/${event.lessonId}`);
+            }}
+            style={primaryBtn}
+          >
+            Перейти к уроку
+          </motion.button>
+        )}
+        {!isLive && event.assignmentId && event.course && (
+          <motion.button
+            type="button"
+            whileHover={{ scale: 1.03 }}
+            whileTap={{ scale: 0.97 }}
+            onClick={() => {
+              onClose();
+              navigate(
+                `/lk/courses/${event.course!.id}?tab=homework&assignmentId=${event.assignmentId}`,
+              );
+            }}
+            style={primaryBtn}
+          >
+            К заданию
+          </motion.button>
+        )}
+      </div>
+    </Modal>
+  );
+}
+
+const primaryBtn: CSSProperties = {
+  border: 'none',
+  borderRadius: 8,
+  padding: '8px 14px',
+  background: 'var(--accent)',
+  color: '#fff',
+  fontWeight: 600,
+  cursor: 'pointer',
+};
+
+const navBtn: CSSProperties = {
+  width: 36,
+  height: 36,
+  borderRadius: 8,
+  border: '1px solid var(--border)',
+  background: 'var(--bg)',
+  cursor: 'pointer',
+  display: 'inline-flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+};
+
+export function WeekStripCalendar({ events }: Props) {
+  const [anchor, setAnchor] = useState(() => dayjs());
+  const [selected, setSelected] = useState<CalEvent | null>(null);
+  const [dir, setDir] = useState(0);
+
+  const weekStart = anchor.startOf('isoWeek');
+  const days = useMemo(
+    () => Array.from({ length: 7 }, (_, i) => weekStart.add(i, 'day')),
+    [weekStart],
+  );
+
+  const shiftWeek = (delta: number) => {
+    setDir(delta);
+    setAnchor((a) => a.add(delta, 'week'));
+  };
+
+  return (
+    <div>
       <div
         style={{
           display: 'flex',
-          justifyContent: 'space-between',
           alignItems: 'center',
+          justifyContent: 'space-between',
           marginBottom: 12,
         }}
       >
+        <motion.button
+          type="button"
+          whileHover={{ scale: 1.08 }}
+          whileTap={{ scale: 0.92 }}
+          onClick={() => shiftWeek(-1)}
+          style={navBtn}
+          aria-label="Предыдущая неделя"
+        >
+          <LeftOutlined />
+        </motion.button>
         <Typography.Text strong style={{ textTransform: 'capitalize' }}>
-          {month.format('MMMM YYYY')}
+          {weekStart.format('D MMM')} — {weekStart.add(6, 'day').format('D MMM YYYY')}
         </Typography.Text>
-        <div style={{ display: 'flex', gap: 8 }}>
-          <button
-            type="button"
-            aria-label="Предыдущий месяц"
-            onClick={() => setMonth((m) => m.subtract(1, 'month'))}
-            style={navBtn}
+        <motion.button
+          type="button"
+          whileHover={{ scale: 1.08 }}
+          whileTap={{ scale: 0.92 }}
+          onClick={() => shiftWeek(1)}
+          style={navBtn}
+          aria-label="Следующая неделя"
+        >
+          <RightOutlined />
+        </motion.button>
+      </div>
+
+      <div style={{ overflow: 'hidden' }}>
+        <AnimatePresence mode="wait" custom={dir}>
+          <motion.div
+            key={weekStart.format('YYYY-MM-DD')}
+            custom={dir}
+            initial={{ opacity: 0, x: dir >= 0 ? 40 : -40 }}
+            animate={{ opacity: 1, x: 0 }}
+            exit={{ opacity: 0, x: dir >= 0 ? -40 : 40 }}
+            transition={{ duration: 0.28, ease: easeOutExpo }}
+            style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(7, minmax(0, 1fr))',
+              gap: 8,
+            }}
           >
-            <LeftOutlined />
-          </button>
-          <button
-            type="button"
-            aria-label="Следующий месяц"
-            onClick={() => setMonth((m) => m.add(1, 'month'))}
-            style={navBtn}
-          >
-            <RightOutlined />
-          </button>
-        </div>
+            {days.map((day, i) => {
+              const dayEvents = eventsOnDay(events, day);
+              const isToday = day.isSame(dayjs(), 'day');
+              return (
+                <motion.div
+                  key={day.format('YYYY-MM-DD')}
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.25, delay: i * 0.03, ease: easeOutExpo }}
+                  style={{
+                    minHeight: 120,
+                    borderRadius: 10,
+                    border: `1px solid ${isToday ? 'var(--accent)' : 'var(--border)'}`,
+                    background: isToday ? 'var(--accent-soft)' : 'var(--bg)',
+                    padding: 8,
+                  }}
+                >
+                  <div style={{ marginBottom: 6, fontSize: 12, color: 'var(--muted)' }}>
+                    <span style={{ fontWeight: 700, color: 'var(--fg)' }}>{WEEKDAYS[i]}</span>{' '}
+                    {day.format('D')}
+                  </div>
+                  {dayEvents.map((ev) => (
+                    <EventChip key={ev.id} event={ev} onClick={() => setSelected(ev)} />
+                  ))}
+                </motion.div>
+              );
+            })}
+          </motion.div>
+        </AnimatePresence>
+      </div>
+
+      <EventModal event={selected} open={!!selected} onClose={() => setSelected(null)} />
+    </div>
+  );
+}
+
+export function MonthGridCalendar({ events }: Props) {
+  const [anchor, setAnchor] = useState(() => dayjs());
+  const [selected, setSelected] = useState<CalEvent | null>(null);
+  const [dir, setDir] = useState(0);
+
+  const monthStart = anchor.startOf('month');
+  const gridStart = monthStart.startOf('isoWeek');
+  const cells = useMemo(
+    () => Array.from({ length: 42 }, (_, i) => gridStart.add(i, 'day')),
+    [gridStart],
+  );
+
+  const shiftMonth = (delta: number) => {
+    setDir(delta);
+    setAnchor((a) => a.add(delta, 'month'));
+  };
+
+  return (
+    <div>
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          marginBottom: 12,
+        }}
+      >
+        <motion.button
+          type="button"
+          whileHover={{ scale: 1.08 }}
+          whileTap={{ scale: 0.92 }}
+          onClick={() => shiftMonth(-1)}
+          style={navBtn}
+          aria-label="Предыдущий месяц"
+        >
+          <LeftOutlined />
+        </motion.button>
+        <Typography.Text strong style={{ textTransform: 'capitalize' }}>
+          {anchor.format('MMMM YYYY')}
+        </Typography.Text>
+        <motion.button
+          type="button"
+          whileHover={{ scale: 1.08 }}
+          whileTap={{ scale: 0.92 }}
+          onClick={() => shiftMonth(1)}
+          style={navBtn}
+          aria-label="Следующий месяц"
+        >
+          <RightOutlined />
+        </motion.button>
       </div>
 
       <div
         style={{
           display: 'grid',
           gridTemplateColumns: 'repeat(7, minmax(0, 1fr))',
-          gap: 6,
+          gap: 4,
           marginBottom: 6,
         }}
       >
-        {['пн', 'вт', 'ср', 'чт', 'пт', 'сб', 'вс'].map((w) => (
+        {WEEKDAYS.map((d) => (
           <div
-            key={w}
-            style={{
-              textAlign: 'center',
-              fontSize: 12,
-              color: '#8c8c8c',
-              textTransform: 'uppercase',
-            }}
+            key={d}
+            style={{ textAlign: 'center', fontSize: 12, color: 'var(--muted)', fontWeight: 600 }}
           >
-            {w}
+            {d}
           </div>
         ))}
       </div>
 
-      {weeks.map((week, wi) => (
-        <div
-          key={wi}
-          style={{
-            display: 'grid',
-            gridTemplateColumns: 'repeat(7, minmax(0, 1fr))',
-            gap: 6,
-            marginBottom: 6,
-          }}
-        >
-          {week.map((d) => {
-            const dayEvents = byDay(d);
-            const inMonth = d.month() === month.month();
-            const isToday = d.isSame(dayjs(), 'day');
-            const deadlines = dayEvents.filter((e) => e.type === 'DEADLINE').length;
-            return (
-              <div
-                key={d.toISOString()}
-                style={{
-                  minHeight: 88,
-                  borderRadius: 12,
-                  border: '1px solid #f0f0f0',
-                  padding: 6,
-                  background: isToday ? 'var(--accent-soft)' : inMonth ? '#fff' : '#fafafa',
-                  opacity: inMonth ? 1 : 0.55,
-                }}
-              >
+      <div style={{ overflow: 'hidden' }}>
+        <AnimatePresence mode="wait" custom={dir}>
+          <motion.div
+            key={monthStart.format('YYYY-MM')}
+            custom={dir}
+            initial={{ opacity: 0, x: dir >= 0 ? 48 : -48 }}
+            animate={{ opacity: 1, x: 0 }}
+            exit={{ opacity: 0, x: dir >= 0 ? -48 : 48 }}
+            transition={{ duration: 0.3, ease: easeOutExpo }}
+            style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(7, minmax(0, 1fr))',
+              gap: 4,
+            }}
+          >
+            {cells.map((day) => {
+              const inMonth = day.month() === anchor.month();
+              const isToday = day.isSame(dayjs(), 'day');
+              const dayEvents = eventsOnDay(events, day);
+              return (
                 <div
+                  key={day.format('YYYY-MM-DD')}
                   style={{
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    width: 26,
-                    height: 26,
+                    minHeight: 88,
                     borderRadius: 8,
-                    fontWeight: 700,
-                    fontSize: 13,
-                    background: isToday ? 'var(--accent)' : 'transparent',
-                    color: isToday ? '#fff' : '#333',
-                    marginBottom: 4,
+                    border: `1px solid ${isToday ? 'var(--accent)' : 'var(--border)'}`,
+                    background: !inMonth
+                      ? 'var(--surface)'
+                      : isToday
+                        ? 'var(--accent-soft)'
+                        : 'var(--bg)',
+                    padding: 6,
+                    opacity: inMonth ? 1 : 0.55,
                   }}
                 >
-                  {d.format('D')}
-                </div>
-                {deadlines > 0 ? (
-                  <div style={{ fontSize: 10, color: '#8c8c8c', marginBottom: 4 }}>
-                    Дедлайн {deadlines}
+                  <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 4 }}>
+                    {day.format('D')}
                   </div>
-                ) : null}
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
-                  {dayEvents.slice(0, 3).map((e) => (
-                    <button
-                      key={e.id}
-                      type="button"
-                      onClick={() => setSelected(e)}
-                      style={{
-                        textAlign: 'left',
-                        border: 'none',
-                        borderRadius: 6,
-                        padding: '3px 5px',
-                        background: e.type === 'LIVE' ? '#e8f3ff' : '#f3eeff',
-                        cursor: 'pointer',
-                        fontSize: 10,
-                        lineHeight: 1.2,
-                      }}
-                    >
-                      {dayjs(e.startsAt).format('HH:mm')} {e.title}
-                    </button>
+                  {dayEvents.slice(0, 3).map((ev) => (
+                    <EventChip key={ev.id} event={ev} onClick={() => setSelected(ev)} />
                   ))}
-                  {dayEvents.length > 3 ? (
-                    <span style={{ fontSize: 10, color: '#8c8c8c' }}>
+                  {dayEvents.length > 3 && (
+                    <Typography.Text type="secondary" style={{ fontSize: 10 }}>
                       +{dayEvents.length - 3}
-                    </span>
-                  ) : null}
+                    </Typography.Text>
+                  )}
                 </div>
-              </div>
-            );
-          })}
-        </div>
-      ))}
+              );
+            })}
+          </motion.div>
+        </AnimatePresence>
+      </div>
 
-      <Modal
-        open={!!selected}
-        title={selected?.title}
-        onCancel={() => setSelected(null)}
-        footer={null}
-      >
-        {selected ? (
-          <div>
-            <Typography.Paragraph>
-              {selected.type === 'LIVE' ? 'Занятие' : 'Дедлайн'} ·{' '}
-              {dayjs(selected.startsAt).format('DD.MM.YYYY HH:mm')}
-            </Typography.Paragraph>
-            {selected.course ? (
-              <Typography.Paragraph type="secondary">
-                {selected.course.title}
-              </Typography.Paragraph>
-            ) : null}
-            {selected.meetingUrl ? (
-              <Typography.Paragraph>
-                <a href={selected.meetingUrl} target="_blank" rel="noreferrer">
-                  Ссылка на встречу
-                </a>
-              </Typography.Paragraph>
-            ) : null}
-            {selected.lessonId ? (
-              <a
-                onClick={() => {
-                  setSelected(null);
-                  nav(`/lk/lessons/${selected.lessonId}`);
-                }}
-              >
-                Открыть урок
-              </a>
-            ) : null}
-            {selected.assignmentId ? (
-              <div>
-                <a
-                  onClick={() => {
-                    setSelected(null);
-                    nav(`/lk/assignments/${selected.assignmentId}`);
-                  }}
-                >
-                  Открыть ДЗ
-                </a>
-              </div>
-            ) : null}
-          </div>
-        ) : null}
-      </Modal>
+      <EventModal event={selected} open={!!selected} onClose={() => setSelected(null)} />
     </div>
   );
 }
-
-/** Compact week strip (course page) */
-export function WeekStripCalendar({
-  events,
-  daysCount = 7,
-}: {
-  events: CalEvent[];
-  daysCount?: number;
-}) {
-  const nav = useNavigate();
-  const [anchor, setAnchor] = useState(() => dayjs().startOf('day'));
-  const [selected, setSelected] = useState<CalEvent | null>(null);
-
-  const days = useMemo(
-    () => Array.from({ length: daysCount }, (_, i) => anchor.add(i, 'day')),
-    [anchor, daysCount],
-  );
-
-  const byDay = (d: Dayjs) =>
-    events.filter((e) => dayjs(e.startsAt).isSame(d, 'day'));
-
-  return (
-    <div
-      style={{
-        background: '#fff',
-        borderRadius: 16,
-        border: '1px solid #ebebeb',
-        padding: 16,
-      }}
-    >
-      <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginBottom: 8 }}>
-        <button
-          type="button"
-          onClick={() => setAnchor((a) => a.subtract(daysCount, 'day'))}
-          style={navBtn}
-        >
-          <LeftOutlined />
-        </button>
-        <button
-          type="button"
-          onClick={() => setAnchor((a) => a.add(daysCount, 'day'))}
-          style={navBtn}
-        >
-          <RightOutlined />
-        </button>
-      </div>
-      <div
-        style={{
-          display: 'grid',
-          gridTemplateColumns: `repeat(${daysCount}, minmax(0, 1fr))`,
-          gap: 8,
-        }}
-      >
-        {days.map((d) => {
-          const dayEvents = byDay(d);
-          const isToday = d.isSame(dayjs(), 'day');
-          return (
-            <div key={d.toISOString()}>
-              <div style={{ textAlign: 'center', marginBottom: 8 }}>
-                <div
-                  style={{
-                    display: 'inline-flex',
-                    flexDirection: 'column',
-                    alignItems: 'center',
-                    padding: '6px 10px',
-                    borderRadius: 12,
-                    background: isToday ? 'var(--accent)' : 'transparent',
-                    color: isToday ? '#fff' : 'inherit',
-                  }}
-                >
-                  <span style={{ fontSize: 18, fontWeight: 700 }}>{d.format('D')}</span>
-                  <span style={{ fontSize: 11, textTransform: 'uppercase' }}>
-                    {d.format('dd')}
-                  </span>
-                </div>
-                <div style={{ fontSize: 12, color: '#8c8c8c', marginTop: 6 }}>
-                  Дедлайн {dayEvents.filter((e) => e.type === 'DEADLINE').length}
-                </div>
-              </div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                {dayEvents.map((e) => (
-                  <button
-                    key={e.id}
-                    type="button"
-                    onClick={() => setSelected(e)}
-                    style={{
-                      textAlign: 'left',
-                      border: 'none',
-                      borderRadius: 10,
-                      padding: '8px 10px',
-                      background: e.type === 'LIVE' ? '#e8f3ff' : '#f3eeff',
-                      cursor: 'pointer',
-                      fontSize: 12,
-                    }}
-                  >
-                    <div style={{ fontWeight: 600 }}>
-                      {dayjs(e.startsAt).format('HH:mm')} ·{' '}
-                      {e.type === 'LIVE' ? 'Занятие' : 'Дедлайн'}
-                    </div>
-                    <div style={{ color: '#555' }}>{e.title}</div>
-                  </button>
-                ))}
-              </div>
-            </div>
-          );
-        })}
-      </div>
-      <Modal
-        open={!!selected}
-        title={selected?.title}
-        onCancel={() => setSelected(null)}
-        footer={null}
-      >
-        {selected?.assignmentId ? (
-          <a
-            onClick={() => {
-              setSelected(null);
-              nav(`/lk/assignments/${selected.assignmentId}`);
-            }}
-          >
-            Открыть ДЗ
-          </a>
-        ) : selected?.lessonId ? (
-          <a
-            onClick={() => {
-              setSelected(null);
-              nav(`/lk/lessons/${selected.lessonId}`);
-            }}
-          >
-            Открыть урок
-          </a>
-        ) : (
-          <Typography.Text type="secondary">Нет ссылки</Typography.Text>
-        )}
-      </Modal>
-    </div>
-  );
-}
-
-const navBtn: CSSProperties = {
-  border: '1px solid #ebebeb',
-  background: '#fff',
-  borderRadius: 8,
-  width: 32,
-  height: 32,
-  cursor: 'pointer',
-};
