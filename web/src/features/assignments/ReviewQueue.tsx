@@ -1,13 +1,25 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Button, Form, Input, InputNumber, Modal, Table, Typography, message } from 'antd';
+import { Button, Form, Input, InputNumber, Modal, Space, Table, Typography, message } from 'antd';
 import { useState } from 'react';
 import { api } from '../../shared/api/client';
+
+type FileMeta = {
+  id: string;
+  originalName: string;
+  mimeType: string;
+  sizeBytes: number;
+};
 
 type Submission = {
   id: string;
   status: string;
   userId: string;
-  assignment: { id: string; title: string };
+  assignment: {
+    id: string;
+    title: string;
+    responseMode?: string;
+    maxXp?: number;
+  };
   answers: Array<{
     id: string;
     questionId: string;
@@ -15,6 +27,7 @@ type Submission = {
     pointsAwarded?: number | null;
     question?: { type: string; points: number; prompt: string };
   }>;
+  files?: FileMeta[];
 };
 
 export function ReviewQueue({ courseId }: { courseId: string }) {
@@ -31,12 +44,18 @@ export function ReviewQueue({ courseId }: { courseId: string }) {
   const [detail, setDetail] = useState<Submission | null>(null);
 
   const open = async (row: Submission) => {
-    // list may not include question meta — fetch assignment for OPEN ids
     const asg = await api<{
       questions: Array<{ id: string; type: string; points: number; prompt: string }>;
+      maxXp: number;
+      responseMode: string;
     }>(`/assignments/${row.assignment.id}`);
     const merged: Submission = {
       ...row,
+      assignment: {
+        ...row.assignment,
+        maxXp: asg.maxXp,
+        responseMode: asg.responseMode,
+      },
       answers: row.answers.map((a) => ({
         ...a,
         question: asg.questions.find((qq) => qq.id === a.questionId),
@@ -46,10 +65,15 @@ export function ReviewQueue({ courseId }: { courseId: string }) {
     setCurrent(row);
   };
 
+  const openFile = async (fileId: string) => {
+    const res = await api<{ url: string }>(`/files/${fileId}/download`);
+    window.open(res.url, '_blank', 'noopener,noreferrer');
+  };
+
   return (
     <div>
       <Typography.Paragraph type="secondary">
-        Развёрнутые ответы, ожидающие оценки куратора
+        Ответы и файлы, ожидающие оценки куратора
       </Typography.Paragraph>
       <Table
         rowKey="id"
@@ -58,6 +82,10 @@ export function ReviewQueue({ courseId }: { courseId: string }) {
         columns={[
           { title: 'Задание', render: (_, r) => r.assignment?.title },
           { title: 'Ученик', dataIndex: 'userId' },
+          {
+            title: 'Файлы',
+            render: (_, r) => r.files?.length ?? 0,
+          },
           { title: 'Статус', dataIndex: 'status' },
           {
             title: '',
@@ -71,7 +99,7 @@ export function ReviewQueue({ courseId }: { courseId: string }) {
       />
 
       <Modal
-        title="Проверка OPEN"
+        title="Проверка"
         open={!!current}
         onCancel={() => {
           setCurrent(null);
@@ -97,6 +125,9 @@ export function ReviewQueue({ courseId }: { courseId: string }) {
                       pointsAwarded: Number(values[`p_${a.questionId}`] ?? 0),
                       feedback: values[`f_${a.questionId}`],
                     })),
+                    ...(openQs.length === 0
+                      ? { scoreXp: Number(values.scoreXp ?? 0) }
+                      : {}),
                   },
                 });
                 message.success('Оценено');
@@ -109,6 +140,19 @@ export function ReviewQueue({ courseId }: { courseId: string }) {
               }
             }}
           >
+            {(detail.files ?? []).length > 0 && (
+              <div style={{ marginBottom: 16 }}>
+                <Typography.Text strong>Файлы ученика</Typography.Text>
+                <Space direction="vertical" style={{ display: 'flex', marginTop: 8 }}>
+                  {detail.files!.map((f) => (
+                    <Button key={f.id} type="link" onClick={() => openFile(f.id)}>
+                      {f.originalName}
+                    </Button>
+                  ))}
+                </Space>
+              </div>
+            )}
+
             {(detail.answers ?? [])
               .filter((a) => a.question?.type === 'OPEN')
               .map((a) => (
@@ -136,6 +180,19 @@ export function ReviewQueue({ courseId }: { courseId: string }) {
                   </Form.Item>
                 </div>
               ))}
+
+            {(detail.answers ?? []).filter((a) => a.question?.type === 'OPEN')
+              .length === 0 && (
+              <Form.Item
+                name="scoreXp"
+                label={`XP (макс ${detail.assignment.maxXp ?? 0})`}
+                rules={[{ required: true }]}
+                initialValue={detail.assignment.maxXp ?? 0}
+              >
+                <InputNumber min={0} max={detail.assignment.maxXp ?? 1000} />
+              </Form.Item>
+            )}
+
             <Button type="primary" htmlType="submit" block>
               Сохранить оценку
             </Button>
