@@ -16,12 +16,14 @@ export function PublicShell() {
       <motion.div
         initial={{ y: -12, opacity: 0 }}
         animate={{ y: 0, opacity: 1 }}
-        transition={{ duration: 0.55, ease: easeOutExpo }}
+        transition={{ duration: 0.5, ease: easeOutExpo }}
       >
         <Header
           style={{
-            background: 'rgba(255,255,255,0.92)',
-            borderBottom: '1px solid var(--border)',
+            background: 'rgba(255,255,255,0.82)',
+            backdropFilter: 'blur(12px)',
+            WebkitBackdropFilter: 'blur(12px)',
+            borderBottom: '1px solid rgba(190,170,242,0.25)',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'space-between',
@@ -29,18 +31,32 @@ export function PublicShell() {
             position: 'sticky',
             top: 0,
             zIndex: 10,
+            height: 64,
           }}
         >
           <Link to="/" style={{ color: 'inherit', textDecoration: 'none' }}>
-            <Typography.Text strong style={{ fontSize: 18 }}>
+            <Typography.Text
+              strong
+              style={{
+                fontSize: 17,
+                letterSpacing: '-0.02em',
+                color: '#1a1528',
+              }}
+            >
               Олимпиадная школа
             </Typography.Text>
           </Link>
           <Space size="middle">
-            <Button onClick={() => nav('/catalog')}>Каталог</Button>
+            <Button
+              type="text"
+              onClick={() => nav('/catalog')}
+              style={{ fontWeight: 500 }}
+            >
+              Каталог
+            </Button>
             {user ? (
               <>
-                <Button type="primary" onClick={() => nav('/lk')}>
+                <Button type="primary" onClick={() => nav('/lk')} style={{ borderRadius: 10 }}>
                   Кабинет
                 </Button>
                 <Button
@@ -53,7 +69,11 @@ export function PublicShell() {
                 </Button>
               </>
             ) : (
-              <Button type="primary" onClick={() => nav('/login')}>
+              <Button
+                type="primary"
+                onClick={() => nav('/login')}
+                style={{ borderRadius: 10, fontWeight: 600 }}
+              >
                 Войти
               </Button>
             )}
@@ -63,7 +83,14 @@ export function PublicShell() {
       <Content>
         <AnimatedOutlet />
       </Content>
-      <Footer style={{ textAlign: 'center', background: 'transparent' }}>
+      <Footer
+        style={{
+          textAlign: 'center',
+          background: 'transparent',
+          color: '#8c8798',
+          padding: '28px 24px',
+        }}
+      >
         Олимпиадная школа
       </Footer>
     </Layout>
