@@ -244,12 +244,7 @@ export function StudentShell() {
               )}
             </button>
             {staffPath ? (
-              <Button
-                type="primary"
-                onClick={() =>
-                  window.open(staffPath, '_blank', 'noopener,noreferrer')
-                }
-              >
+              <Button type="primary" onClick={() => nav(staffPath)}>
                 Staff
               </Button>
             ) : null}

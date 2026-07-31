@@ -146,6 +146,7 @@ function AppRoutes() {
             <StaffSupportInboxPage channel="TECH" title="Техподдержка" />
           }
         />
+        <Route path="profile" element={<LkProfilePage />} />
       </Route>
 
       <Route
@@ -222,6 +223,7 @@ function AppRoutes() {
             />
           }
         />
+        <Route path="profile" element={<LkProfilePage />} />
       </Route>
 
       <Route path="*" element={<Navigate to="/" replace />} />

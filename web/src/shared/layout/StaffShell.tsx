@@ -24,7 +24,7 @@ type Item = { key: string; icon: ReactNode; label: string };
 const SIDEBAR_KEY = 'os_staff_sidebar_open';
 
 export function StaffShell({
-  base: _base,
+  base,
   items,
   roleLabel,
 }: {
@@ -118,7 +118,7 @@ export function StaffShell({
           <Space>
             <button
               type="button"
-              onClick={() => nav('/lk/profile')}
+              onClick={() => nav(`${base}/profile`)}
               title="Профиль"
               style={{
                 display: 'flex',
