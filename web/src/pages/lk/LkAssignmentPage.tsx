@@ -12,6 +12,7 @@ import { ArrowLeftOutlined, StarFilled, ClockCircleOutlined } from '@ant-design/
 import { useEffect, useMemo, useState, type CSSProperties } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { api, ApiError } from '../../shared/api/client';
+import { assignmentTypeLabel } from '../../shared/assignments/labels';
 import { FileList, FileUploadButton } from '../../shared/files/FileList';
 
 type Question = {
@@ -305,7 +306,12 @@ export function LkAssignmentPage() {
         </Space>
 
         <div style={card}>
-          <Typography.Text type="secondary">Тестирование</Typography.Text>
+          <Typography.Text type="secondary">
+            {assignmentTypeLabel(
+              assignment.data.responseMode,
+              assignment.data.questions,
+            )}
+          </Typography.Text>
           <Typography.Title level={4} style={{ margin: '8px 0' }}>
             Баллы: {earned} из {totalPts}
             {totalPts ? ` / ${Math.round((earned / totalPts) * 100)}%` : ''}

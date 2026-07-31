@@ -23,10 +23,12 @@ import { AssignCurators } from '../users/AssignCurators';
 import { LeaderboardPanel } from '../xp/LeaderboardPanel';
 import { CourseCalendarTab } from '../schedule/CourseCalendarTab';
 import { LessonEditPanel } from './LessonEditPanel';
+import { CourseCoverControls } from '../../shared/courses/CourseCoverControls';
 
 type CourseDetail = {
   id: string;
   title: string;
+  coverUrl?: string | null;
   modules: Array<{
     id: string;
     title: string;
@@ -233,9 +235,27 @@ export function CourseWorkspace({
 
   return (
     <div>
-      <Typography.Title level={4} style={{ marginTop: 0 }}>
-        {course.data.title}
-      </Typography.Title>
+      <div
+        style={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          gap: 16,
+          flexWrap: 'wrap',
+          alignItems: 'flex-start',
+          marginBottom: 8,
+        }}
+      >
+        <Typography.Title level={4} style={{ marginTop: 0, marginBottom: 0 }}>
+          {course.data.title}
+        </Typography.Title>
+        <CourseCoverControls
+          courseId={courseId}
+          coverUrl={course.data.coverUrl}
+          onChanged={() =>
+            qc.invalidateQueries({ queryKey: ['course', courseId] })
+          }
+        />
+      </div>
       <Tabs
         activeKey={activeTab}
         onChange={setTab}

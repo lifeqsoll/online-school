@@ -1,14 +1,20 @@
 import {
+  BadRequestException,
   ForbiddenException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { AuditAction, MembershipRole } from '@prisma/client';
+import { AuditAction, MembershipRole, Prisma } from '@prisma/client';
+import { randomUUID } from 'crypto';
 import { AuditService } from '../audit/audit.service';
 import { CourseAccessService } from '../enrollments/course-access.service';
+import { IMAGE_MIMES, MAX_PNG_PDF_BYTES } from '../files/files.mime';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuthUser } from '../rbac/auth-user';
+import { StorageService } from '../storage/storage.service';
 import { CreateCourseDto, UpdateCourseDto } from './dto/course.dto';
+
+type CourseRow = Prisma.CourseGetPayload<object>;
 
 @Injectable()
 export class CoursesService {
@@ -16,18 +22,22 @@ export class CoursesService {
     private readonly prisma: PrismaService,
     private readonly access: CourseAccessService,
     private readonly audit: AuditService,
+    private readonly storage: StorageService,
   ) {}
 
   async list(user?: AuthUser, opts?: { managedOnly?: boolean }) {
+    let rows: CourseRow[];
     if (!user) {
       if (opts?.managedOnly) return [];
-      return this.prisma.course.findMany({
+      rows = await this.prisma.course.findMany({
         where: { isPublished: true },
         orderBy: { createdAt: 'desc' },
       });
+      return Promise.all(rows.map((c) => this.present(c)));
     }
     if (user.realGlobalRole === 'ADMIN') {
-      return this.prisma.course.findMany({ orderBy: { createdAt: 'desc' } });
+      rows = await this.prisma.course.findMany({ orderBy: { createdAt: 'desc' } });
+      return Promise.all(rows.map((c) => this.present(c)));
     }
     const memberships = await this.prisma.courseMembership.findMany({
       where: { userId: user.id, role: MembershipRole.CURATOR },
@@ -35,17 +45,19 @@ export class CoursesService {
     });
     const managedIds = memberships.map((m) => m.courseId);
     if (opts?.managedOnly) {
-      return this.prisma.course.findMany({
+      rows = await this.prisma.course.findMany({
         where: { id: { in: managedIds } },
         orderBy: { createdAt: 'desc' },
       });
+      return Promise.all(rows.map((c) => this.present(c)));
     }
-    return this.prisma.course.findMany({
+    rows = await this.prisma.course.findMany({
       where: {
         OR: [{ isPublished: true }, { id: { in: managedIds } }],
       },
       orderBy: { createdAt: 'desc' },
     });
+    return Promise.all(rows.map((c) => this.present(c)));
   }
 
   async get(idOrSlug: string) {
@@ -77,19 +89,19 @@ export class CoursesService {
       throw new NotFoundException('Course not found');
     }
 
-    if (canManage) return course;
+    if (canManage) return this.present(course);
 
     if (hasAccess) {
-      return {
+      return this.present({
         ...course,
         modules: course.modules.map((m) => ({
           ...m,
           lessons: m.lessons.filter((l) => l.isPublished),
         })),
-      };
+      });
     }
 
-    return {
+    return this.present({
       ...course,
       modules: course.modules.map((m) => ({
         id: m.id,
@@ -106,7 +118,7 @@ export class CoursesService {
             isPublished: l.isPublished,
           })),
       })),
-    };
+    });
   }
 
   async create(actor: AuthUser, dto: CreateCourseDto) {
@@ -143,7 +155,7 @@ export class CoursesService {
       actorId: actor.realUserId,
       meta: { courseId: course.id },
     });
-    return course;
+    return this.present(course);
   }
 
   async update(actor: AuthUser, id: string, dto: UpdateCourseDto) {
@@ -163,11 +175,20 @@ export class CoursesService {
       actorId: actor.realUserId,
       meta: { courseId: id },
     });
-    return course;
+    return this.present(course);
   }
 
   async remove(actor: AuthUser, id: string) {
     await this.requireManage(actor, id);
+    const existing = await this.prisma.course.findUnique({ where: { id } });
+    if (!existing) throw new NotFoundException('Course not found');
+    if (existing.coverStorageKey) {
+      try {
+        await this.storage.deleteObject(existing.coverStorageKey);
+      } catch {
+        /* ignore */
+      }
+    }
     await this.prisma.course.delete({ where: { id } });
     await this.audit.append({
       action: AuditAction.COURSE_UPDATE,
@@ -175,6 +196,58 @@ export class CoursesService {
       meta: { courseId: id, deleted: true },
     });
     return { ok: true };
+  }
+
+  async uploadCover(actor: AuthUser, id: string, file: Express.Multer.File) {
+    await this.requireManage(actor, id);
+    if (!file) throw new BadRequestException('file is required');
+    const mime = file.mimetype || '';
+    if (!IMAGE_MIMES.has(mime)) {
+      throw new BadRequestException('Allowed: PNG, JPEG, WebP');
+    }
+    if (file.size > MAX_PNG_PDF_BYTES) {
+      throw new BadRequestException('Cover exceeds 20 MB limit');
+    }
+
+    const course = await this.prisma.course.findUnique({ where: { id } });
+    if (!course) throw new NotFoundException('Course not found');
+
+    const ext =
+      mime === 'image/png' ? 'png' : mime === 'image/webp' ? 'webp' : 'jpg';
+    const key = `courses/${id}/cover/${randomUUID()}.${ext}`;
+    await this.storage.uploadObject(key, file.buffer, mime);
+
+    if (course.coverStorageKey) {
+      try {
+        await this.storage.deleteObject(course.coverStorageKey);
+      } catch {
+        /* ignore */
+      }
+    }
+
+    const updated = await this.prisma.course.update({
+      where: { id },
+      data: { coverStorageKey: key },
+    });
+    return this.present(updated);
+  }
+
+  async removeCover(actor: AuthUser, id: string) {
+    await this.requireManage(actor, id);
+    const course = await this.prisma.course.findUnique({ where: { id } });
+    if (!course) throw new NotFoundException('Course not found');
+    if (course.coverStorageKey) {
+      try {
+        await this.storage.deleteObject(course.coverStorageKey);
+      } catch {
+        /* ignore */
+      }
+    }
+    const updated = await this.prisma.course.update({
+      where: { id },
+      data: { coverStorageKey: null },
+    });
+    return this.present(updated);
   }
 
   async listCurators(actor: AuthUser, courseId: string) {
@@ -221,6 +294,27 @@ export class CoursesService {
   async requireManage(actor: AuthUser, courseId: string) {
     const ok = await this.access.canManageCourse(actor, courseId);
     if (!ok) throw new ForbiddenException('Cannot manage this course');
+  }
+
+  async presentCourseCover<T extends { coverStorageKey?: string | null }>(
+    course: T,
+  ) {
+    return this.present(course);
+  }
+
+  private async present<T extends { coverStorageKey?: string | null }>(
+    course: T,
+  ): Promise<Omit<T, 'coverStorageKey'> & { coverUrl: string | null }> {
+    let coverUrl: string | null = null;
+    if (course.coverStorageKey) {
+      try {
+        coverUrl = await this.storage.getSignedGetUrl(course.coverStorageKey);
+      } catch {
+        coverUrl = null;
+      }
+    }
+    const { coverStorageKey: _, ...rest } = course;
+    return { ...rest, coverUrl };
   }
 
   private async uniqueSlug(title: string): Promise<string> {

@@ -18,6 +18,10 @@ import {
 } from 'antd';
 import { useMemo, useState } from 'react';
 import { api } from '../../shared/api/client';
+import {
+  assignmentTypeLabel,
+  responseModeSelectLabel,
+} from '../../shared/assignments/labels';
 import { FileList, FileUploadButton } from '../../shared/files/FileList';
 
 type QType = 'CHOICE' | 'SHORT' | 'OPEN';
@@ -57,6 +61,7 @@ export function AssignmentConstructor({
           scope: string;
           isPublished: boolean;
           responseMode?: string;
+          questions?: Array<{ type: string }>;
         }>
       >(`/courses/${courseId}/assignments`),
   });
@@ -166,7 +171,10 @@ export function AssignmentConstructor({
   };
 
   return (
-    <div className="grid gap-4" style={{ gridTemplateColumns: '220px 1fr 240px' }}>
+    <div
+      className="grid gap-4"
+      style={{ gridTemplateColumns: '220px 1fr minmax(280px, 320px)' }}
+    >
       <Card size="small" title="Вопросы">
         <Space direction="vertical" style={{ width: '100%' }}>
           <Button block onClick={() => addQuestion('CHOICE')}>
@@ -248,9 +256,9 @@ export function AssignmentConstructor({
                 value={responseMode}
                 onChange={setResponseMode}
                 options={[
-                  { value: 'QUIZ', label: 'Квиз' },
-                  { value: 'FILE', label: 'Только файл (PNG/PDF)' },
-                  { value: 'QUIZ_AND_FILE', label: 'Квиз + файл' },
+                  { value: 'QUIZ', label: 'Тест' },
+                  { value: 'FILE', label: 'Развёрнутое (файл)' },
+                  { value: 'QUIZ_AND_FILE', label: 'Смешанное (тест + файл)' },
                 ]}
               />
             </Form.Item>
@@ -441,31 +449,60 @@ export function AssignmentConstructor({
       </Card>
 
       <Card size="small" title="Сводка">
-        <p>Режим: {responseMode}</p>
+        <p>Режим: {responseModeSelectLabel(responseMode)}</p>
         <p>Вопросов: {responseMode === 'FILE' ? 0 : questions.length}</p>
         <p>Сумма баллов: {responseMode === 'FILE' ? 0 : totalPoints}</p>
         <p>Max XP: {maxXp}</p>
         <Divider />
         <Typography.Text strong>Уже созданные</Typography.Text>
-        <List
-          size="small"
-          dataSource={list.data ?? []}
-          renderItem={(a) => (
-            <List.Item
-              actions={[
+        <div
+          style={{
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 10,
+            marginTop: 10,
+          }}
+        >
+          {(list.data ?? []).map((a) => (
+            <div
+              key={a.id}
+              style={{
+                border: '1px solid #f0f0f0',
+                borderRadius: 10,
+                padding: '10px 12px',
+                background: '#fafafa',
+              }}
+            >
+              <div style={{ fontWeight: 600, fontSize: 13, lineHeight: 1.35 }}>
+                {a.title}
+              </div>
+              <div
+                style={{
+                  fontSize: 12,
+                  color: '#8c8c8c',
+                  marginTop: 2,
+                  marginBottom: 6,
+                }}
+              >
+                {assignmentTypeLabel(a.responseMode, a.questions)}
+                {a.isPublished ? ' · опубликовано' : ' · черновик'}
+              </div>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
                 <Button
-                  key="mat"
                   type="link"
                   size="small"
-                  onClick={() => setMaterialsFor(a.id)}
+                  style={{ paddingInline: 0 }}
+                  onClick={() =>
+                    setMaterialsFor((prev) => (prev === a.id ? null : a.id))
+                  }
                 >
-                  Материалы
-                </Button>,
+                  {materialsFor === a.id ? 'Скрыть материалы' : 'Материалы'}
+                </Button>
                 <Button
-                  key="del"
                   type="link"
                   size="small"
                   danger
+                  style={{ paddingInline: 0 }}
                   onClick={() => {
                     Modal.confirm({
                       title: 'Удалить задание?',
@@ -493,17 +530,21 @@ export function AssignmentConstructor({
                   }}
                 >
                   Удалить
-                </Button>,
-              ]}
-            >
-              {a.title} · {a.responseMode ?? 'QUIZ'}{' '}
-              {a.isPublished ? <Typography.Text type="success">pub</Typography.Text> : null}
-            </List.Item>
-          )}
-        />
+                </Button>
+              </div>
+            </div>
+          ))}
+          {!list.data?.length ? (
+            <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+              Пока нет заданий
+            </Typography.Text>
+          ) : null}
+        </div>
         {materialsFor ? (
           <div style={{ marginTop: 12 }}>
-            <Typography.Text type="secondary">Материалы ДЗ</Typography.Text>
+            <Typography.Text type="secondary" style={{ whiteSpace: 'nowrap' }}>
+              Материалы ДЗ
+            </Typography.Text>
             <div style={{ marginTop: 8 }}>
               <FileUploadButton
                 ownerType="ASSIGNMENT_MATERIAL"

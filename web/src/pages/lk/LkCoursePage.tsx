@@ -6,6 +6,7 @@ import { useMemo, useState, type CSSProperties } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { AnimatePresence, motion } from 'framer-motion';
 import { api } from '../../shared/api/client';
+import { assignmentTypeLabel } from '../../shared/assignments/labels';
 import {
   WeekStripCalendar,
   type CalEvent,
@@ -28,6 +29,8 @@ type Assignment = {
   maxXp: number;
   dueAt?: string | null;
   description?: string | null;
+  responseMode?: string | null;
+  questions?: Array<{ type: string }>;
 };
 
 export function LkCoursePage() {
@@ -187,10 +190,9 @@ export function LkCoursePage() {
                     style={{ textDecoration: 'none', color: 'inherit' }}
                   >
                     <motion.div whileHover={{ y: -2 }} style={cardStyle}>
-                      <ClockCircleOutlined style={{ color: '#69b1ff', marginTop: 4 }} />
                       <div style={{ flex: 1 }}>
                         <div style={{ fontSize: 12, color: '#69b1ff' }}>
-                          Домашнее задание
+                          {assignmentTypeLabel(a.responseMode, a.questions)}
                           {a.dueAt
                             ? ` · дедлайн ${dayjs(a.dueAt).format('D MMM / HH:mm')}`
                             : ''}

@@ -1,8 +1,25 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Button, Space, Table, Tag, Typography, Modal, Form, Input, InputNumber, Switch, message } from 'antd';
+import {
+  Button,
+  Space,
+  Table,
+  Tag,
+  Typography,
+  Modal,
+  Form,
+  Input,
+  InputNumber,
+  Switch,
+  Upload,
+  message,
+} from 'antd';
 import { Link, useNavigate } from 'react-router-dom';
 import { useState } from 'react';
 import { api } from '../../shared/api/client';
+import {
+  CourseCoverControls,
+  uploadCourseCover,
+} from '../../shared/courses/CourseCoverControls';
 
 type Course = {
   id: string;
@@ -10,6 +27,7 @@ type Course = {
   slug: string;
   priceCents: number;
   isPublished: boolean;
+  coverUrl?: string | null;
 };
 
 export function CoursesPage({
@@ -22,11 +40,18 @@ export function CoursesPage({
   const nav = useNavigate();
   const qc = useQueryClient();
   const [open, setOpen] = useState(false);
+  const [coverFor, setCoverFor] = useState<Course | null>(null);
+  const [pendingCover, setPendingCover] = useState<File | null>(null);
   const q = useQuery({
     queryKey: ['courses', managedOnly ? 'managed' : 'all'],
     queryFn: () =>
       api<Course[]>(managedOnly ? '/courses?managedOnly=true' : '/courses'),
   });
+
+  const refresh = async () => {
+    await q.refetch();
+    qc.invalidateQueries({ queryKey: ['courses'] });
+  };
 
   const removeCourse = (id: string, title: string) => {
     Modal.confirm({
@@ -39,8 +64,7 @@ export function CoursesPage({
         try {
           await api(`/courses/${id}`, { method: 'DELETE' });
           message.success('Курс удалён');
-          await q.refetch();
-          qc.invalidateQueries({ queryKey: ['courses'] });
+          await refresh();
         } catch (e) {
           message.error(e instanceof Error ? e.message : 'Ошибка');
         }
@@ -65,7 +89,27 @@ export function CoursesPage({
         loading={q.isLoading}
         dataSource={q.data ?? []}
         columns={[
-          { title: 'Название', dataIndex: 'title' },
+          {
+            title: 'Название',
+            dataIndex: 'title',
+            render: (title: string, r: Course) => (
+              <Space>
+                {r.coverUrl ? (
+                  <span
+                    style={{
+                      width: 40,
+                      height: 28,
+                      borderRadius: 6,
+                      display: 'inline-block',
+                      background: `#ddd url(${r.coverUrl}) center/cover`,
+                      border: '1px solid #eee',
+                    }}
+                  />
+                ) : null}
+                {title}
+              </Space>
+            ),
+          },
           {
             title: 'Цена',
             dataIndex: 'priceCents',
@@ -80,9 +124,12 @@ export function CoursesPage({
           {
             title: '',
             render: (_, r) => (
-              <Space>
+              <Space wrap>
                 <Button type="link" onClick={() => nav(`${base}/courses/${r.id}`)}>
                   Открыть
+                </Button>
+                <Button type="link" onClick={() => setCoverFor(r)}>
+                  Обложка
                 </Button>
                 <Button
                   type="link"
@@ -97,7 +144,16 @@ export function CoursesPage({
         ]}
       />
 
-      <Modal title="Новый курс" open={open} onCancel={() => setOpen(false)} footer={null} destroyOnClose>
+      <Modal
+        title="Новый курс"
+        open={open}
+        onCancel={() => {
+          setOpen(false);
+          setPendingCover(null);
+        }}
+        footer={null}
+        destroyOnClose
+      >
         <Form
           layout="vertical"
           onFinish={async (v) => {
@@ -111,9 +167,17 @@ export function CoursesPage({
                   isPublished: !!v.isPublished,
                 },
               });
+              if (pendingCover) {
+                try {
+                  await uploadCourseCover(c.id, pendingCover);
+                } catch {
+                  message.warning('Курс создан, но обложку загрузить не удалось');
+                }
+              }
               message.success('Курс создан');
               setOpen(false);
-              await q.refetch();
+              setPendingCover(null);
+              await refresh();
               nav(`${base}/courses/${c.id}`);
             } catch (e) {
               message.error(e instanceof Error ? e.message : 'Ошибка');
@@ -126,6 +190,19 @@ export function CoursesPage({
           <Form.Item name="description" label="Описание">
             <Input.TextArea rows={3} />
           </Form.Item>
+          <Form.Item label="Обложка (необязательно)">
+            <Upload
+              accept="image/png,image/jpeg,image/webp,.png,.jpg,.jpeg,.webp"
+              maxCount={1}
+              beforeUpload={(file) => {
+                setPendingCover(file);
+                return false;
+              }}
+              onRemove={() => setPendingCover(null)}
+            >
+              <Button>Выбрать фото</Button>
+            </Upload>
+          </Form.Item>
           <Form.Item name="priceCents" label="Цена (копейки, 0 = бесплатно)" initialValue={0}>
             <InputNumber className="w-full" min={0} />
           </Form.Item>
@@ -136,6 +213,29 @@ export function CoursesPage({
             Создать
           </Button>
         </Form>
+      </Modal>
+
+      <Modal
+        title={`Обложка · ${coverFor?.title ?? ''}`}
+        open={!!coverFor}
+        onCancel={() => setCoverFor(null)}
+        footer={null}
+        destroyOnClose
+      >
+        {coverFor ? (
+          <CourseCoverControls
+            courseId={coverFor.id}
+            coverUrl={coverFor.coverUrl}
+            onChanged={async () => {
+              await refresh();
+              const rows = await api<Course[]>(
+                managedOnly ? '/courses?managedOnly=true' : '/courses',
+              );
+              const updated = rows.find((c) => c.id === coverFor.id);
+              if (updated) setCoverFor(updated);
+            }}
+          />
+        ) : null}
       </Modal>
     </div>
   );

@@ -10,6 +10,7 @@ import { AuditService } from '../audit/audit.service';
 import { OutboxService } from '../outbox/outbox.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuthUser } from '../rbac/auth-user';
+import { StorageService } from '../storage/storage.service';
 import { CourseAccessService } from './course-access.service';
 
 @Injectable()
@@ -19,6 +20,7 @@ export class EnrollmentsService {
     private readonly access: CourseAccessService,
     private readonly audit: AuditService,
     private readonly outbox: OutboxService,
+    private readonly storage: StorageService,
   ) {}
 
   async enrollFree(user: AuthUser, courseId: string) {
@@ -91,11 +93,33 @@ export class EnrollmentsService {
     }
   }
 
-  listMine(userId: string) {
-    return this.prisma.enrollment.findMany({
+  async listMine(userId: string) {
+    const rows = await this.prisma.enrollment.findMany({
       where: { userId },
       include: { course: true },
       orderBy: { createdAt: 'desc' },
     });
+    return Promise.all(
+      rows.map(async (row) => {
+        let coverUrl: string | null = null;
+        if (row.course.coverStorageKey) {
+          try {
+            coverUrl = await this.storage.getSignedGetUrl(
+              row.course.coverStorageKey,
+            );
+          } catch {
+            coverUrl = null;
+          }
+        }
+        return {
+          ...row,
+          course: {
+            ...row.course,
+            coverStorageKey: undefined,
+            coverUrl,
+          },
+        };
+      }),
+    );
   }
 }

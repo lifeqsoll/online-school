@@ -1,4 +1,4 @@
-import { Button, List, Modal, Space, Typography, message } from 'antd';
+import { Button, Modal, Typography, message } from 'antd';
 import {
   DeleteOutlined,
   DownloadOutlined,
@@ -88,18 +88,62 @@ export function FileList({
 
   return (
     <>
-      <List
-        size="small"
-        dataSource={q.data}
-        renderItem={(f) => {
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+        {q.data.map((f) => {
           const video = isVideoMime(f.mimeType);
           const image = isImageMime(f.mimeType);
           return (
-            <List.Item
-              actions={[
+            <div
+              key={f.id}
+              style={{
+                display: 'flex',
+                flexWrap: 'wrap',
+                alignItems: 'flex-start',
+                gap: 8,
+                padding: '8px 0',
+                borderBottom: '1px solid #f0f0f0',
+                minWidth: 0,
+              }}
+            >
+              <div
+                style={{
+                  flex: '1 1 120px',
+                  minWidth: 0,
+                  display: 'flex',
+                  gap: 8,
+                  alignItems: 'flex-start',
+                }}
+              >
+                {video || image ? (
+                  <PlayCircleOutlined
+                    style={{ color: '#6b4fb8', marginTop: 3, flexShrink: 0 }}
+                  />
+                ) : (
+                  <FileOutlined
+                    style={{ color: '#8c8c8c', marginTop: 3, flexShrink: 0 }}
+                  />
+                )}
+                <div style={{ minWidth: 0, wordBreak: 'break-word' }}>
+                  <div style={{ lineHeight: 1.35 }}>{f.originalName}</div>
+                  <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+                    {formatSize(f.sizeBytes)}
+                    {video ? ' · видео' : image ? ' · фото' : ''}
+                  </Typography.Text>
+                </div>
+              </div>
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 0,
+                  flexShrink: 0,
+                  marginLeft: 'auto',
+                }}
+              >
                 <Button
-                  key="open"
                   type="link"
+                  size="small"
+                  style={{ paddingInline: 6 }}
                   icon={
                     video || image ? (
                       <PlayCircleOutlined />
@@ -110,48 +154,32 @@ export function FileList({
                   onClick={() => openFile(f)}
                 >
                   {video ? 'Смотреть' : image ? 'Открыть' : 'Скачать'}
-                </Button>,
-                ...(canDelete
-                  ? [
-                      <Button
-                        key="rm"
-                        type="link"
-                        danger
-                        icon={<DeleteOutlined />}
-                        loading={del.isPending}
-                        onClick={async () => {
-                          try {
-                            await del.mutateAsync(f.id);
-                            message.success('Удалено');
-                          } catch (e) {
-                            message.error(
-                              e instanceof Error ? e.message : 'Ошибка',
-                            );
-                          }
-                        }}
-                      />,
-                    ]
-                  : []),
-              ]}
-            >
-              <Space>
-                {video || image ? (
-                  <PlayCircleOutlined style={{ color: '#6b4fb8' }} />
-                ) : (
-                  <FileOutlined style={{ color: '#8c8c8c' }} />
-                )}
-                <span>
-                  {f.originalName}{' '}
-                  <Typography.Text type="secondary">
-                    ({formatSize(f.sizeBytes)}
-                    {video ? ' · видео' : image ? ' · фото' : ''})
-                  </Typography.Text>
-                </span>
-              </Space>
-            </List.Item>
+                </Button>
+                {canDelete ? (
+                  <Button
+                    type="link"
+                    size="small"
+                    danger
+                    style={{ paddingInline: 6 }}
+                    icon={<DeleteOutlined />}
+                    loading={del.isPending}
+                    onClick={async () => {
+                      try {
+                        await del.mutateAsync(f.id);
+                        message.success('Удалено');
+                      } catch (e) {
+                        message.error(
+                          e instanceof Error ? e.message : 'Ошибка',
+                        );
+                      }
+                    }}
+                  />
+                ) : null}
+              </div>
+            </div>
           );
-        }}
-      />
+        })}
+      </div>
       <Modal
         open={!!preview}
         title={preview?.name}

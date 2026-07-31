@@ -2,15 +2,13 @@ import { useQuery } from '@tanstack/react-query';
 import { Spin, Tag, Typography } from 'antd';
 import {
   StarFilled,
-  ClockCircleOutlined,
   CheckCircleFilled,
-  HourglassOutlined,
 } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import { Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import type { ReactNode } from 'react';
 import { api } from '../../shared/api/client';
+import { assignmentTypeLabel } from '../../shared/assignments/labels';
 import { easeOutExpo, fadeUp, stagger } from '../../shared/motion';
 
 type Enrollment = { courseId: string; course: { id: string; title: string } };
@@ -19,6 +17,8 @@ type Assignment = {
   title: string;
   maxXp: number;
   dueAt?: string | null;
+  responseMode?: string | null;
+  questions?: Array<{ type: string }>;
 };
 type Submission = {
   id: string;
@@ -31,7 +31,6 @@ type HwStatus = 'todo' | 'in_progress' | 'pending' | 'done';
 
 function statusOf(subs: Submission[] | undefined): HwStatus {
   if (!subs?.length) return 'todo';
-  // Any finished attempt → done/pending (ignore leftover empty drafts after retake)
   const finished = subs.filter((s) => s.status !== 'IN_PROGRESS');
   if (finished.some((s) => s.status === 'GRADED' || s.status === 'AUTO_GRADED')) {
     return 'done';
@@ -54,7 +53,6 @@ const STATUS_UI: Record<
     color: string;
     border: string;
     bg: string;
-    icon: ReactNode;
   }
 > = {
   todo: {
@@ -62,28 +60,24 @@ const STATUS_UI: Record<
     color: 'default',
     border: '#ebebeb',
     bg: '#fff',
-    icon: <ClockCircleOutlined style={{ color: '#8c8c8c', marginTop: 4 }} />,
   },
   in_progress: {
     label: 'В работе',
     color: 'orange',
     border: '#ffd591',
     bg: '#fff7e6',
-    icon: <HourglassOutlined style={{ color: '#fa8c16', marginTop: 4 }} />,
   },
   pending: {
     label: 'На проверке',
     color: 'blue',
     border: '#91caff',
     bg: '#e6f4ff',
-    icon: <HourglassOutlined style={{ color: '#1677ff', marginTop: 4 }} />,
   },
   done: {
     label: null,
     color: 'default',
     border: '#ebebeb',
     bg: '#fff',
-    icon: <ClockCircleOutlined style={{ color: '#8c8c8c', marginTop: 4 }} />,
   },
 };
 
@@ -169,6 +163,7 @@ export function LkHomeworkPage() {
         {(homework.data ?? []).map((a, i) => {
           const ui = STATUS_UI[a.hwStatus];
           const done = a.hwStatus === 'done';
+          const typeLabel = assignmentTypeLabel(a.responseMode, a.questions);
           return (
             <motion.div key={a.id} variants={fadeUp} custom={i}>
               <Link
@@ -187,10 +182,9 @@ export function LkHomeworkPage() {
                     padding: '14px 16px',
                   }}
                 >
-                  {ui.icon}
-                  <div style={{ flex: 1 }}>
+                  <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ fontSize: 12, color: '#69b1ff' }}>
-                      {a.courseTitle}
+                      {typeLabel}
                       {a.dueAt
                         ? ` · дедлайн ${dayjs(a.dueAt).format('D MMM / HH:mm')}`
                         : ''}
@@ -218,6 +212,7 @@ export function LkHomeworkPage() {
                       flexDirection: 'column',
                       alignItems: 'flex-end',
                       gap: 6,
+                      flexShrink: 0,
                     }}
                   >
                     {ui.label ? (

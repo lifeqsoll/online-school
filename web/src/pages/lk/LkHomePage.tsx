@@ -13,7 +13,12 @@ import { fadeUp, stagger } from '../../shared/motion';
 
 type Enrollment = {
   courseId: string;
-  course: { id: string; title: string; description?: string | null };
+  course: {
+    id: string;
+    title: string;
+    description?: string | null;
+    coverUrl?: string | null;
+  };
 };
 
 export function LkHomePage() {
@@ -110,7 +115,9 @@ export function LkHomePage() {
           gap: 14,
         }}
       >
-        {(Array.isArray(enrollments.data) ? enrollments.data : []).map((e, i) => (
+        {(Array.isArray(enrollments.data) ? enrollments.data : []).map((e, i) => {
+          const hasCover = !!e.course.coverUrl;
+          return (
           <motion.div key={e.courseId} variants={fadeUp} custom={i}>
             <Link
               to={`/lk/courses/${e.courseId}`}
@@ -123,34 +130,73 @@ export function LkHomePage() {
                 }}
                 transition={{ duration: 0.22 }}
                 style={{
-                  background: '#fff',
-                  border: '1px solid #ebebeb',
+                  background: hasCover
+                    ? `#1a1525 url(${e.course.coverUrl}) center/cover no-repeat`
+                    : '#fff',
+                  border: hasCover
+                    ? '1px solid rgba(0,0,0,0.08)'
+                    : '1px solid #ebebeb',
                   borderRadius: 14,
                   padding: 16,
+                  minHeight: 120,
+                  position: 'relative',
+                  overflow: 'hidden',
                 }}
               >
-                <div
-                  style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}
-                >
-                  <Typography.Text strong style={{ fontSize: 14 }}>
-                    {e.course.title}
-                  </Typography.Text>
-                  <Typography.Text type="secondary" style={{ whiteSpace: 'nowrap' }}>
-                    <StarFilled style={{ color: '#faad14' }} /> XP
-                  </Typography.Text>
+                {hasCover ? (
+                  <div
+                    style={{
+                      position: 'absolute',
+                      inset: 0,
+                      background:
+                        'linear-gradient(180deg, rgba(20,16,32,0.2) 0%, rgba(12,10,20,0.82) 100%)',
+                      pointerEvents: 'none',
+                    }}
+                  />
+                ) : null}
+                <div style={{ position: 'relative', zIndex: 1 }}>
+                  <div
+                    style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}
+                  >
+                    <Typography.Text
+                      strong
+                      style={{
+                        fontSize: 14,
+                        color: hasCover ? '#fff' : undefined,
+                      }}
+                    >
+                      {e.course.title}
+                    </Typography.Text>
+                    <Typography.Text
+                      style={{
+                        whiteSpace: 'nowrap',
+                        color: hasCover ? 'rgba(255,255,255,0.75)' : undefined,
+                      }}
+                      type={hasCover ? undefined : 'secondary'}
+                    >
+                      <StarFilled style={{ color: '#faad14' }} /> XP
+                    </Typography.Text>
+                  </div>
+                  <Typography.Paragraph
+                    ellipsis={{ rows: 2 }}
+                    style={{
+                      marginTop: 10,
+                      marginBottom: 0,
+                      fontSize: 13,
+                      color: hasCover
+                        ? 'rgba(255,255,255,0.75)'
+                        : 'rgba(0,0,0,0.45)',
+                    }}
+                  >
+                    {e.course.description ||
+                      'Открыть курс · уроки и домашние задания'}
+                  </Typography.Paragraph>
                 </div>
-                <Typography.Paragraph
-                  type="secondary"
-                  ellipsis={{ rows: 2 }}
-                  style={{ marginTop: 10, marginBottom: 0, fontSize: 13 }}
-                >
-                  {e.course.description ||
-                    'Открыть курс · уроки и домашние задания'}
-                </Typography.Paragraph>
               </motion.div>
             </Link>
           </motion.div>
-        ))}
+          );
+        })}
         {!enrollments.data?.length ? (
           <Typography.Text type="secondary">
             Пока нет курсов — запишитесь через публичный каталог на сайте

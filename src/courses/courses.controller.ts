@@ -7,10 +7,14 @@ import {
   Patch,
   Post,
   Query,
+  UploadedFile,
+  UseInterceptors,
 } from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { Public } from '../common/decorators/public.decorator';
 import { SanitizePipe } from '../common/pipes/sanitize.pipe';
+import { MAX_UPLOAD_BYTES } from '../files/files.mime';
 import { AuthUser } from '../rbac/auth-user';
 import { CoursesService } from './courses.service';
 import {
@@ -58,6 +62,25 @@ export class CoursesController {
     @Body(SanitizePipe) dto: UpdateCourseDto,
   ) {
     return this.courses.update(user, id, dto);
+  }
+
+  @Post(':id/cover')
+  @UseInterceptors(
+    FileInterceptor('file', {
+      limits: { fileSize: MAX_UPLOAD_BYTES },
+    }),
+  )
+  uploadCover(
+    @CurrentUser() user: AuthUser,
+    @Param('id') id: string,
+    @UploadedFile() file: Express.Multer.File,
+  ) {
+    return this.courses.uploadCover(user, id, file);
+  }
+
+  @Delete(':id/cover')
+  removeCover(@CurrentUser() user: AuthUser, @Param('id') id: string) {
+    return this.courses.removeCover(user, id);
   }
 
   @Delete(':id')

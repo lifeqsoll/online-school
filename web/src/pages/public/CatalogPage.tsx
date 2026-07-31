@@ -14,6 +14,7 @@ type Course = {
   description?: string | null;
   priceCents: number;
   isPublished: boolean;
+  coverUrl?: string | null;
 };
 
 export function CatalogPage() {
@@ -111,6 +112,7 @@ export function CatalogPage() {
                 {rows.map((c, i) => {
                   const colors = courseColor(c.id);
                   const free = c.priceCents === 0;
+                  const hasCover = !!c.coverUrl;
                   return (
                     <motion.div
                       key={c.id}
@@ -134,25 +136,44 @@ export function CatalogPage() {
                       style={{
                         borderRadius: 18,
                         overflow: 'hidden',
-                        background: '#fff',
-                        border: '1px solid rgba(190,170,242,0.28)',
+                        background: hasCover
+                          ? `#1a1525 url(${c.coverUrl}) center/cover no-repeat`
+                          : '#fff',
+                        border: hasCover
+                          ? '1px solid rgba(0,0,0,0.08)'
+                          : '1px solid rgba(190,170,242,0.28)',
                         display: 'flex',
                         flexDirection: 'column',
-                        minHeight: 220,
+                        minHeight: 240,
+                        position: 'relative',
                       }}
                     >
-                      <div
-                        style={{
-                          height: 8,
-                          background: `linear-gradient(90deg, ${colors.border}, ${colors.bg})`,
-                        }}
-                      />
+                      {!hasCover ? (
+                        <div
+                          style={{
+                            height: 8,
+                            background: `linear-gradient(90deg, ${colors.border}, ${colors.bg})`,
+                          }}
+                        />
+                      ) : (
+                        <div
+                          style={{
+                            position: 'absolute',
+                            inset: 0,
+                            background:
+                              'linear-gradient(180deg, rgba(20,16,32,0.25) 0%, rgba(20,16,32,0.55) 45%, rgba(12,10,20,0.88) 100%)',
+                            pointerEvents: 'none',
+                          }}
+                        />
+                      )}
                       <div
                         style={{
                           padding: '20px 20px 18px',
                           flex: 1,
                           display: 'flex',
                           flexDirection: 'column',
+                          position: 'relative',
+                          zIndex: 1,
                         }}
                       >
                         <div
@@ -170,6 +191,7 @@ export function CatalogPage() {
                               fontSize: 18,
                               fontWeight: 700,
                               letterSpacing: '-0.01em',
+                              color: hasCover ? '#fff' : undefined,
                             }}
                           >
                             {c.title}
@@ -182,10 +204,21 @@ export function CatalogPage() {
                               padding: '4px 10px',
                               borderRadius: 999,
                               background: free
-                                ? 'rgba(82,196,26,0.12)'
-                                : 'rgba(190,170,242,0.2)',
-                              color: free ? '#389e0d' : '#6b4fb8',
+                                ? hasCover
+                                  ? 'rgba(82,196,26,0.28)'
+                                  : 'rgba(82,196,26,0.12)'
+                                : hasCover
+                                  ? 'rgba(255,255,255,0.22)'
+                                  : 'rgba(190,170,242,0.2)',
+                              color: free
+                                ? hasCover
+                                  ? '#b7eb8f'
+                                  : '#389e0d'
+                                : hasCover
+                                  ? '#fff'
+                                  : '#6b4fb8',
                               height: 'fit-content',
+                              backdropFilter: hasCover ? 'blur(6px)' : undefined,
                             }}
                           >
                             {free
@@ -194,9 +227,15 @@ export function CatalogPage() {
                           </span>
                         </div>
                         <Typography.Paragraph
-                          type="secondary"
                           ellipsis={{ rows: 3 }}
-                          style={{ flex: 1, marginBottom: 16, fontSize: 14 }}
+                          style={{
+                            flex: 1,
+                            marginBottom: 16,
+                            fontSize: 14,
+                            color: hasCover
+                              ? 'rgba(255,255,255,0.78)'
+                              : 'rgba(0,0,0,0.45)',
+                          }}
                         >
                           {c.description || 'Описание скоро появится'}
                         </Typography.Paragraph>
@@ -204,7 +243,17 @@ export function CatalogPage() {
                           <motion.div whileHover={{ x: 3 }} whileTap={{ scale: 0.98 }}>
                             <Button
                               type="primary"
-                              style={{ borderRadius: 10, fontWeight: 600 }}
+                              style={{
+                                borderRadius: 10,
+                                fontWeight: 600,
+                                ...(hasCover
+                                  ? {
+                                      background: 'rgba(255,255,255,0.95)',
+                                      color: '#3d2a7a',
+                                      borderColor: 'transparent',
+                                    }
+                                  : {}),
+                              }}
                             >
                               Подробнее <ArrowRightOutlined />
                             </Button>
