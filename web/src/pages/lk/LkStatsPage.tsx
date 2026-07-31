@@ -1,16 +1,9 @@
 import { useQuery } from '@tanstack/react-query';
 import { Empty, Progress, Select, Typography } from 'antd';
 import { StarFilled } from '@ant-design/icons';
-import {
-  Radar,
-  RadarChart,
-  PolarGrid,
-  PolarAngleAxis,
-  PolarRadiusAxis,
-  ResponsiveContainer,
-} from 'recharts';
 import { useMemo, useState } from 'react';
 import { api } from '../../shared/api/client';
+import { WindRoseChart } from '../../shared/analytics/WindRoseChart';
 
 type Enrollment = {
   courseId: string;
@@ -20,7 +13,14 @@ type Enrollment = {
 type RadarPayload = {
   labels: string[];
   values: number[];
-  struggling?: boolean[];
+  scaleValues?: number[];
+  scaleMax?: number;
+  details?: Array<{
+    lessonsDone: number;
+    lessonsTotal: number;
+    hwDone: number;
+    hwTotal: number;
+  }>;
 };
 
 export function LkStatsPage() {
@@ -59,18 +59,16 @@ export function LkStatsPage() {
   const leaderboard = useQuery({
     queryKey: ['leaderboard', activeId],
     queryFn: () =>
-      api<Array<{ userId: string; totalXp: number; rank?: number; displayName?: string }>>(
-        `/courses/${activeId}/leaderboard?limit=10`,
-      ),
+      api<
+        Array<{
+          userId: string;
+          totalXp: number;
+          rank?: number;
+          displayName?: string;
+        }>
+      >(`/courses/${activeId}/leaderboard?limit=10`),
     enabled: !!activeId,
   });
-
-  const radarData =
-    radar.data?.labels.map((label, i) => ({
-      topic: label,
-      value: radar.data?.values[i] ?? 0,
-      fullMark: 100,
-    })) ?? [];
 
   const totalXp = xp.data?.totalXp ?? 0;
   const barMax = Math.max(100, Math.ceil((totalXp + 1) / 100) * 100);
@@ -87,7 +85,7 @@ export function LkStatsPage() {
         Статистика
       </Typography.Title>
       <Typography.Paragraph type="secondary">
-        Ваша успеваемость по курсу
+        Успеваемость по модулям курса: уроки и ДЗ (≥75%)
       </Typography.Paragraph>
 
       <Select
@@ -131,34 +129,58 @@ export function LkStatsPage() {
           borderRadius: 12,
           padding: 20,
           marginBottom: 20,
-          minHeight: 320,
         }}
       >
         <Typography.Title level={5} style={{ marginTop: 0 }}>
-          Темы (роза ветров)
+          Роза ветров по модулям
         </Typography.Title>
-        {radar.isLoading ? (
-          <Typography.Text type="secondary">Загрузка…</Typography.Text>
-        ) : radar.isError || !radarData.length ? (
-          <Typography.Text type="secondary">
-            Пока недостаточно данных по темам
-          </Typography.Text>
-        ) : (
-          <ResponsiveContainer width="100%" height={280}>
-            <RadarChart data={radarData}>
-              <PolarGrid />
-              <PolarAngleAxis dataKey="topic" tick={{ fontSize: 11 }} />
-              <PolarRadiusAxis angle={30} domain={[0, 100]} />
-              <Radar
-                name="Мастерство"
-                dataKey="value"
-                stroke="#beaaf2"
-                fill="#beaaf2"
-                fillOpacity={0.45}
-              />
-            </RadarChart>
-          </ResponsiveContainer>
-        )}
+        <Typography.Paragraph type="secondary" style={{ marginTop: 0 }}>
+          Ось — модуль. Значение растёт, когда вы проходите уроки и сдаёте ДЗ
+          на ≥75%.
+        </Typography.Paragraph>
+        <WindRoseChart
+          data={radar.data}
+          loading={radar.isLoading}
+          emptyText="Добавьте модули в курс — роза появится здесь"
+        />
+        {radar.data?.details?.length ? (
+          <div
+            style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))',
+              gap: 10,
+              marginTop: 16,
+            }}
+          >
+            {radar.data.labels.map((label, i) => {
+              const d = radar.data!.details![i];
+              return (
+                <div
+                  key={`${label}-${i}`}
+                  style={{
+                    background: '#fafafa',
+                    borderRadius: 10,
+                    padding: '10px 12px',
+                    border: '1px solid #f0f0f0',
+                  }}
+                >
+                  <Typography.Text strong style={{ fontSize: 13 }}>
+                    {label}
+                  </Typography.Text>
+                  <div>
+                    <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+                      Уроки {d.lessonsDone}/{d.lessonsTotal} · ДЗ {d.hwDone}/
+                      {d.hwTotal}
+                    </Typography.Text>
+                  </div>
+                  <Typography.Text style={{ fontSize: 12, color: '#6b4fb8' }}>
+                    {radar.data!.values[i]}%
+                  </Typography.Text>
+                </div>
+              );
+            })}
+          </div>
+        ) : null}
       </div>
 
       <div
@@ -176,7 +198,8 @@ export function LkStatsPage() {
           <ol style={{ margin: 0, paddingLeft: 20 }}>
             {leaderboard.data!.map((row) => (
               <li key={row.userId} style={{ marginBottom: 6 }}>
-                #{row.rank ?? 0} · {row.displayName ?? 'User'} · {row.totalXp} XP
+                #{row.rank ?? 0} · {row.displayName ?? 'User'} · {row.totalXp}{' '}
+                XP
               </li>
             ))}
           </ol>

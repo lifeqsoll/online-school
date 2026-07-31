@@ -15,8 +15,9 @@ import {
   Divider,
   Switch,
   Modal,
+  Tag,
 } from 'antd';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { api } from '../../shared/api/client';
 import {
   assignmentTypeLabel,
@@ -43,6 +44,8 @@ type ModuleOpt = {
   lessons: { id: string; title: string }[];
 };
 
+type SaveMode = 'draft' | 'publish' | 'autosave';
+
 export function AssignmentConstructor({
   courseId,
   modules,
@@ -61,7 +64,7 @@ export function AssignmentConstructor({
           scope: string;
           isPublished: boolean;
           responseMode?: string;
-          questions?: Array<{ type: string }>;
+          questions?: Array<{ type: string; prompt?: string }>;
         }>
       >(`/courses/${courseId}/assignments`),
   });
@@ -72,11 +75,14 @@ export function AssignmentConstructor({
   const [title, setTitle] = useState('Новое задание');
   const [maxXp, setMaxXp] = useState(100);
   const [maxAttempts, setMaxAttempts] = useState<number | null>(null);
-  const [published, setPublished] = useState(true);
+  const [published, setPublished] = useState(false);
   const [responseMode, setResponseMode] = useState<
     'QUIZ' | 'FILE' | 'QUIZ_AND_FILE'
   >('QUIZ');
   const [materialsFor, setMaterialsFor] = useState<string | null>(null);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [saveHint, setSaveHint] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
   const [questions, setQuestions] = useState<DraftQuestion[]>([
     {
       key: 'q1',
@@ -91,6 +97,19 @@ export function AssignmentConstructor({
     },
   ]);
   const [active, setActive] = useState('q1');
+
+  const dirtyRef = useRef(false);
+  const savingRef = useRef(false);
+  const skipAutosaveRef = useRef(false);
+  const editingIdRef = useRef<string | null>(null);
+  const publishedRef = useRef(false);
+  editingIdRef.current = editingId;
+  publishedRef.current = published;
+
+  const markDirty = () => {
+    if (skipAutosaveRef.current) return;
+    dirtyRef.current = true;
+  };
 
   const lessons = useMemo(
     () => modules.flatMap((m) => m.lessons.map((l) => ({ ...l, moduleTitle: m.title }))),
@@ -123,59 +142,288 @@ export function AssignmentConstructor({
     }
     setQuestions((qs) => [...qs, base]);
     setActive(key);
+    markDirty();
   };
 
-  const save = async () => {
+  const resetDraft = () => {
+    skipAutosaveRef.current = true;
+    dirtyRef.current = false;
+    setEditingId(null);
+    setTitle('Новое задание');
+    setMaxXp(100);
+    setMaxAttempts(null);
+    setPublished(false);
+    setResponseMode('QUIZ');
+    setScope('LESSON');
+    setLessonId(undefined);
+    setModuleId(undefined);
+    setSaveHint(null);
+    const key = `q${Date.now()}`;
+    setQuestions([
+      {
+        key,
+        type: 'CHOICE',
+        prompt: 'Выберите верный ответ',
+        points: 5,
+        options: [
+          { id: 'a', text: 'Вариант A' },
+          { id: 'b', text: 'Вариант B' },
+        ],
+        correctKeys: ['a'],
+      },
+    ]);
+    setActive(key);
+    setTimeout(() => {
+      skipAutosaveRef.current = false;
+    }, 0);
+  };
+
+  const loadAssignment = async (id: string) => {
     try {
-      if (responseMode !== 'FILE' && questions.length === 0) {
-        message.error('Добавьте хотя бы один вопрос');
-        return;
+      skipAutosaveRef.current = true;
+      const a = await api<{
+        id: string;
+        title: string;
+        scope: 'LESSON' | 'MODULE' | 'COURSE';
+        lessonId?: string | null;
+        moduleId?: string | null;
+        maxXp: number;
+        maxAttempts?: number | null;
+        isPublished: boolean;
+        responseMode?: 'QUIZ' | 'FILE' | 'QUIZ_AND_FILE';
+        questions: Array<{
+          id: string;
+          type: QType;
+          prompt: string;
+          points: number;
+          options?: { id: string; text: string }[] | null;
+          correctKeys?: string[] | null;
+          shortMatch?: 'EXACT' | 'NUMBER' | null;
+          numberTolerance?: number | null;
+        }>;
+      }>(`/assignments/${id}`);
+      setEditingId(a.id);
+      setTitle(a.title);
+      setScope(a.scope);
+      setLessonId(a.lessonId ?? undefined);
+      setModuleId(a.moduleId ?? undefined);
+      setMaxXp(a.maxXp);
+      setMaxAttempts(a.maxAttempts ?? null);
+      setPublished(a.isPublished);
+      setResponseMode(a.responseMode ?? 'QUIZ');
+      const qs: DraftQuestion[] =
+        a.questions.length > 0
+          ? a.questions.map((q) => ({
+              key: q.id,
+              type: q.type,
+              prompt: q.prompt,
+              points: q.points,
+              options: q.options ?? undefined,
+              correctKeys: q.correctKeys ?? undefined,
+              shortMatch: q.shortMatch ?? undefined,
+              numberTolerance: q.numberTolerance ?? undefined,
+            }))
+          : [
+              {
+                key: `q${Date.now()}`,
+                type: 'CHOICE',
+                prompt: 'Выберите верный ответ',
+                points: 5,
+                options: [
+                  { id: 'a', text: 'Вариант A' },
+                  { id: 'b', text: 'Вариант B' },
+                ],
+                correctKeys: ['a'],
+              },
+            ];
+      setQuestions(qs);
+      setActive(qs[0].key);
+      setMaterialsFor(a.id);
+      dirtyRef.current = false;
+      setSaveHint(a.isPublished ? 'Опубликовано' : 'Черновик на сервере');
+      message.success('Задание открыто для редактирования');
+      setTimeout(() => {
+        skipAutosaveRef.current = false;
+      }, 0);
+    } catch (e) {
+      skipAutosaveRef.current = false;
+      message.error(e instanceof Error ? e.message : 'Не удалось открыть');
+    }
+  };
+
+  const buildQuestionsPayload = () =>
+    responseMode === 'FILE'
+      ? []
+      : questions.map((q, i) => ({
+          type: q.type,
+          prompt: q.prompt,
+          points: q.points,
+          sortOrder: i,
+          options: q.type === 'CHOICE' ? q.options : undefined,
+          correctKeys: q.type === 'OPEN' ? undefined : q.correctKeys,
+          shortMatch: q.type === 'SHORT' ? q.shortMatch : undefined,
+          numberTolerance:
+            q.type === 'SHORT' && q.shortMatch === 'NUMBER'
+              ? q.numberTolerance ?? 0
+              : undefined,
+        }));
+
+  const canPersist = () => {
+    if (!title.trim()) return false;
+    if (responseMode !== 'FILE' && questions.length === 0) return false;
+    if (scope === 'LESSON' && !lessonId) return false;
+    if (scope === 'MODULE' && !moduleId) return false;
+    return true;
+  };
+
+  const persist = async (mode: SaveMode) => {
+    if (savingRef.current) return false;
+    if (!canPersist()) {
+      if (mode !== 'autosave') {
+        if (!title.trim()) message.error('Укажите название');
+        else if (scope === 'LESSON' && !lessonId) message.error('Выберите урок');
+        else if (scope === 'MODULE' && !moduleId) message.error('Выберите модуль');
+        else message.error('Добавьте хотя бы один вопрос');
       }
+      return false;
+    }
+
+    const nextPublished =
+      mode === 'publish'
+        ? true
+        : mode === 'draft'
+          ? false
+          : editingIdRef.current
+            ? publishedRef.current
+            : false;
+
+    savingRef.current = true;
+    setSaving(true);
+    if (mode === 'autosave') setSaveHint('Сохранение черновика…');
+
+    try {
+      const id = editingIdRef.current;
+      if (id) {
+        await api(`/assignments/${id}`, {
+          method: 'PATCH',
+          json: {
+            title,
+            maxXp,
+            maxAttempts,
+            isPublished: nextPublished,
+            responseMode,
+          },
+        });
+        try {
+          await api(`/assignments/${id}/questions`, {
+            method: 'PUT',
+            json: { questions: buildQuestionsPayload() },
+          });
+        } catch (e) {
+          if (mode !== 'autosave') {
+            message.warning(
+              e instanceof Error
+                ? `${e.message} (метаданные сохранены)`
+                : 'Вопросы не обновлены — возможно, уже есть сдачи',
+            );
+          }
+        }
+        setPublished(nextPublished);
+        dirtyRef.current = false;
+        setSaveHint(
+          nextPublished
+            ? 'Опубликовано'
+            : `Черновик сохранён · ${new Date().toLocaleTimeString()}`,
+        );
+        if (mode === 'publish') message.success('Задание опубликовано');
+        else if (mode === 'draft') message.success('Черновик сохранён');
+        qc.invalidateQueries({ queryKey: ['assignments', courseId] });
+        return true;
+      }
+
       const payload: Record<string, unknown> = {
         scope,
         title,
         maxXp,
         maxAttempts,
-        isPublished: published,
+        isPublished: nextPublished,
         responseMode,
-        questions:
-          responseMode === 'FILE'
-            ? []
-            : questions.map((q, i) => ({
-                type: q.type,
-                prompt: q.prompt,
-                points: q.points,
-                sortOrder: i,
-                options: q.type === 'CHOICE' ? q.options : undefined,
-                correctKeys: q.type === 'OPEN' ? undefined : q.correctKeys,
-                shortMatch: q.type === 'SHORT' ? q.shortMatch : undefined,
-                numberTolerance:
-                  q.type === 'SHORT' && q.shortMatch === 'NUMBER'
-                    ? q.numberTolerance ?? 0
-                    : undefined,
-              })),
+        questions: buildQuestionsPayload(),
       };
       if (scope === 'LESSON') payload.lessonId = lessonId;
       if (scope === 'MODULE') payload.moduleId = moduleId;
 
-      const created = await api<{ id: string }>(`/courses/${courseId}/assignments`, {
-        method: 'POST',
-        json: payload,
-      });
-      message.success('Задание создано');
+      const created = await api<{ id: string }>(
+        `/courses/${courseId}/assignments`,
+        {
+          method: 'POST',
+          json: payload,
+        },
+      );
       setMaterialsFor(created.id);
+      setEditingId(created.id);
+      setPublished(nextPublished);
+      dirtyRef.current = false;
+      setSaveHint(
+        nextPublished
+          ? 'Опубликовано'
+          : `Черновик создан · ${new Date().toLocaleTimeString()}`,
+      );
+      if (mode === 'publish') {
+        message.success(
+          `Опубликовано ДЗ «${title}» с ${
+            responseMode === 'FILE' ? 0 : questions.length
+          } вопр.`,
+        );
+      } else if (mode === 'draft') {
+        message.success('Черновик создан (ученики его не видят)');
+      }
       qc.invalidateQueries({ queryKey: ['assignments', courseId] });
+      return true;
     } catch (e) {
-      message.error(e instanceof Error ? e.message : 'Ошибка сохранения');
+      if (mode !== 'autosave') {
+        message.error(e instanceof Error ? e.message : 'Ошибка сохранения');
+      } else {
+        setSaveHint('Не удалось автосохранить');
+      }
+      return false;
+    } finally {
+      savingRef.current = false;
+      setSaving(false);
     }
   };
+
+  // Autosave unfinished work as an unpublished draft (or update existing).
+  useEffect(() => {
+    if (skipAutosaveRef.current) return;
+    if (!canPersist()) return;
+    const t = window.setTimeout(() => {
+      if (skipAutosaveRef.current || savingRef.current) return;
+      void persist('autosave');
+    }, 1800);
+    return () => window.clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    title,
+    maxXp,
+    maxAttempts,
+    published,
+    responseMode,
+    scope,
+    lessonId,
+    moduleId,
+    questions,
+  ]);
 
   return (
     <div
       className="grid gap-4"
       style={{ gridTemplateColumns: '220px 1fr minmax(280px, 320px)' }}
     >
-      <Card size="small" title="Вопросы">
+      <Card size="small" title="Вопросы этого ДЗ">
+        <Typography.Paragraph type="secondary" style={{ fontSize: 12, marginBottom: 8 }}>
+          Все вопросы ниже войдут в <strong>одно</strong> домашнее задание.
+        </Typography.Paragraph>
         <Space direction="vertical" style={{ width: '100%' }}>
           <Button block onClick={() => addQuestion('CHOICE')}>
             + Тест (варианты)
@@ -190,7 +438,7 @@ export function AssignmentConstructor({
           <List
             size="small"
             dataSource={questions}
-            renderItem={(q) => (
+            renderItem={(q, idx) => (
               <List.Item
                 onClick={() => setActive(q.key)}
                 style={{
@@ -201,7 +449,9 @@ export function AssignmentConstructor({
                 }}
               >
                 <div>
-                  <div>{q.type}</div>
+                  <div style={{ fontSize: 12, color: '#8c8c8c' }}>
+                    Вопрос {idx + 1} · {q.type}
+                  </div>
                   <Typography.Text type="secondary" ellipsis>
                     {q.prompt}
                   </Typography.Text>
@@ -212,13 +462,39 @@ export function AssignmentConstructor({
         </Space>
       </Card>
 
-      <Card size="small" title="Редактор">
+      <Card
+        size="small"
+        title={editingId ? 'Редактирование ДЗ' : 'Новое ДЗ'}
+        extra={
+          editingId ? (
+            <Button type="link" size="small" onClick={resetDraft}>
+              Новое
+            </Button>
+          ) : null
+        }
+      >
         <Space direction="vertical" style={{ width: '100%' }} size="middle">
           <Form layout="vertical">
+            <Form.Item
+              label="Название задания"
+              extra="Это название одного ДЗ целиком (не отдельного вопроса)."
+            >
+              <Input
+                value={title}
+                onChange={(e) => {
+                  setTitle(e.target.value);
+                  markDirty();
+                }}
+              />
+            </Form.Item>
             <Form.Item label="Уровень задания">
               <Select
                 value={scope}
-                onChange={(v) => setScope(v)}
+                onChange={(v) => {
+                  setScope(v);
+                  markDirty();
+                }}
+                disabled={!!editingId}
                 options={[
                   { value: 'LESSON', label: 'К уроку' },
                   { value: 'MODULE', label: 'К модулю (промежуточный)' },
@@ -230,7 +506,11 @@ export function AssignmentConstructor({
               <Form.Item label="Урок" required>
                 <Select
                   value={lessonId}
-                  onChange={setLessonId}
+                  onChange={(v) => {
+                    setLessonId(v);
+                    markDirty();
+                  }}
+                  disabled={!!editingId}
                   options={lessons.map((l) => ({
                     value: l.id,
                     label: `${l.title}`,
@@ -243,18 +523,22 @@ export function AssignmentConstructor({
               <Form.Item label="Модуль" required>
                 <Select
                   value={moduleId}
-                  onChange={setModuleId}
+                  onChange={(v) => {
+                    setModuleId(v);
+                    markDirty();
+                  }}
+                  disabled={!!editingId}
                   options={modules.map((m) => ({ value: m.id, label: m.title }))}
                 />
               </Form.Item>
             )}
-            <Form.Item label="Название задания">
-              <Input value={title} onChange={(e) => setTitle(e.target.value)} />
-            </Form.Item>
             <Form.Item label="Режим ответа">
               <Select
                 value={responseMode}
-                onChange={setResponseMode}
+                onChange={(v) => {
+                  setResponseMode(v);
+                  markDirty();
+                }}
                 options={[
                   { value: 'QUIZ', label: 'Тест' },
                   { value: 'FILE', label: 'Развёрнутое (файл)' },
@@ -264,17 +548,36 @@ export function AssignmentConstructor({
             </Form.Item>
             <Space>
               <Form.Item label="Max XP">
-                <InputNumber min={0} value={maxXp} onChange={(v) => setMaxXp(v ?? 0)} />
+                <InputNumber
+                  min={0}
+                  value={maxXp}
+                  onChange={(v) => {
+                    setMaxXp(v ?? 0);
+                    markDirty();
+                  }}
+                />
               </Form.Item>
               <Form.Item label="Попытки (пусто = ∞)">
                 <InputNumber
                   min={1}
                   value={maxAttempts ?? undefined}
-                  onChange={(v) => setMaxAttempts(v)}
+                  onChange={(v) => {
+                    setMaxAttempts(v);
+                    markDirty();
+                  }}
                 />
               </Form.Item>
-              <Form.Item label="Опубликовано">
-                <Switch checked={published} onChange={setPublished} />
+              <Form.Item
+                label="Опубликовано"
+                extra="Выкл = черновик (ученики не видят)"
+              >
+                <Switch
+                  checked={published}
+                  onChange={(v) => {
+                    setPublished(v);
+                    markDirty();
+                  }}
+                />
               </Form.Item>
             </Space>
           </Form>
@@ -442,19 +745,48 @@ export function AssignmentConstructor({
             </Card>
           ) : null}
 
-          <Button type="primary" onClick={save}>
-            Создать задание
-          </Button>
+          {saveHint ? (
+            <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+              {saveHint}
+              {saving ? '…' : ''}
+            </Typography.Text>
+          ) : (
+            <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+              Выберите урок и правьте вопросы — черновик сохранится сам (~2 с).
+              Ученики видят только опубликованные ДЗ.
+            </Typography.Text>
+          )}
+          <Space wrap>
+            <Button loading={saving} onClick={() => void persist('draft')}>
+              Сохранить черновик
+            </Button>
+            <Button
+              type="primary"
+              loading={saving}
+              onClick={() => void persist('publish')}
+            >
+              Опубликовать
+            </Button>
+          </Space>
         </Space>
       </Card>
 
-      <Card size="small" title="Сводка">
-        <p>Режим: {responseModeSelectLabel(responseMode)}</p>
-        <p>Вопросов: {responseMode === 'FILE' ? 0 : questions.length}</p>
-        <p>Сумма баллов: {responseMode === 'FILE' ? 0 : totalPoints}</p>
-        <p>Max XP: {maxXp}</p>
+      <Card size="small" title="Список ДЗ курса">
+        <Typography.Paragraph type="secondary" style={{ fontSize: 12 }}>
+          Каждая карточка — одно задание. Вопросы внутри него не отдельные ДЗ.
+        </Typography.Paragraph>
+        <p style={{ margin: '0 0 4px' }}>
+          Сейчас в редакторе: {responseModeSelectLabel(responseMode)}
+        </p>
+        <p style={{ margin: '0 0 4px' }}>
+          Вопросов в черновике: {responseMode === 'FILE' ? 0 : questions.length}
+        </p>
+        <p style={{ margin: '0 0 4px' }}>
+          Сумма баллов: {responseMode === 'FILE' ? 0 : totalPoints}
+        </p>
+        <p style={{ margin: '0 0 8px' }}>Max XP: {maxXp}</p>
         <Divider />
-        <Typography.Text strong>Уже созданные</Typography.Text>
+        <Typography.Text strong>Созданные задания</Typography.Text>
         <div
           style={{
             display: 'flex',
@@ -463,80 +795,126 @@ export function AssignmentConstructor({
             marginTop: 10,
           }}
         >
-          {(list.data ?? []).map((a) => (
-            <div
-              key={a.id}
-              style={{
-                border: '1px solid #f0f0f0',
-                borderRadius: 10,
-                padding: '10px 12px',
-                background: '#fafafa',
-              }}
-            >
-              <div style={{ fontWeight: 600, fontSize: 13, lineHeight: 1.35 }}>
-                {a.title}
-              </div>
+          {(list.data ?? []).map((a) => {
+            const qCount = a.questions?.length ?? 0;
+            return (
               <div
+                key={a.id}
                 style={{
-                  fontSize: 12,
-                  color: '#8c8c8c',
-                  marginTop: 2,
-                  marginBottom: 6,
+                  border:
+                    editingId === a.id
+                      ? '1px solid #beaaf2'
+                      : '1px solid #f0f0f0',
+                  borderRadius: 10,
+                  padding: '10px 12px',
+                  background: editingId === a.id ? '#f7f5ff' : '#fafafa',
                 }}
               >
-                {assignmentTypeLabel(a.responseMode, a.questions)}
-                {a.isPublished ? ' · опубликовано' : ' · черновик'}
-              </div>
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
-                <Button
-                  type="link"
-                  size="small"
-                  style={{ paddingInline: 0 }}
-                  onClick={() =>
-                    setMaterialsFor((prev) => (prev === a.id ? null : a.id))
-                  }
-                >
-                  {materialsFor === a.id ? 'Скрыть материалы' : 'Материалы'}
-                </Button>
-                <Button
-                  type="link"
-                  size="small"
-                  danger
-                  style={{ paddingInline: 0 }}
-                  onClick={() => {
-                    Modal.confirm({
-                      title: 'Удалить задание?',
-                      content: `«${a.title}» и все сдачи будут удалены.`,
-                      okText: 'Удалить',
-                      okType: 'danger',
-                      cancelText: 'Отмена',
-                      onOk: async () => {
-                        try {
-                          await api(`/assignments/${a.id}`, {
-                            method: 'DELETE',
-                          });
-                          message.success('Задание удалено');
-                          if (materialsFor === a.id) setMaterialsFor(null);
-                          qc.invalidateQueries({
-                            queryKey: ['assignments', courseId],
-                          });
-                        } catch (e) {
-                          message.error(
-                            e instanceof Error ? e.message : 'Ошибка',
-                          );
-                        }
-                      },
-                    });
+                <div style={{ fontWeight: 600, fontSize: 13, lineHeight: 1.35 }}>
+                  {a.title}
+                </div>
+                <div
+                  style={{
+                    fontSize: 12,
+                    color: '#8c8c8c',
+                    marginTop: 2,
+                    marginBottom: 6,
+                    display: 'flex',
+                    flexWrap: 'wrap',
+                    alignItems: 'center',
+                    gap: 6,
                   }}
                 >
-                  Удалить
-                </Button>
+                  <span>
+                    {assignmentTypeLabel(a.responseMode, a.questions)}
+                    {` · ${qCount} ${qCount === 1 ? 'вопрос' : 'вопр.'}`}
+                  </span>
+                  {a.isPublished ? (
+                    <Tag color="success" style={{ margin: 0 }}>
+                      опубликовано
+                    </Tag>
+                  ) : (
+                    <Tag style={{ margin: 0 }}>черновик</Tag>
+                  )}
+                </div>
+                {qCount > 0 ? (
+                  <ol
+                    style={{
+                      margin: '0 0 8px',
+                      paddingLeft: 18,
+                      fontSize: 12,
+                      color: '#595959',
+                    }}
+                  >
+                    {(a.questions ?? []).slice(0, 8).map((q, i) => (
+                      <li key={`${a.id}-q-${i}`}>
+                        {q.type}
+                        {q.prompt ? `: ${q.prompt.slice(0, 48)}` : ''}
+                      </li>
+                    ))}
+                    {qCount > 8 ? <li>…ещё {qCount - 8}</li> : null}
+                  </ol>
+                ) : null}
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+                  <Button
+                    type="link"
+                    size="small"
+                    style={{ paddingInline: 0 }}
+                    onClick={() => void loadAssignment(a.id)}
+                  >
+                    Открыть
+                  </Button>
+                  <Button
+                    type="link"
+                    size="small"
+                    style={{ paddingInline: 0 }}
+                    onClick={() =>
+                      setMaterialsFor((prev) => (prev === a.id ? null : a.id))
+                    }
+                  >
+                    {materialsFor === a.id ? 'Скрыть материалы' : 'Материалы'}
+                  </Button>
+                  <Button
+                    type="link"
+                    size="small"
+                    danger
+                    style={{ paddingInline: 0 }}
+                    onClick={() => {
+                      Modal.confirm({
+                        title: 'Удалить задание?',
+                        content: `«${a.title}» и все сдачи будут удалены.`,
+                        okText: 'Удалить',
+                        okType: 'danger',
+                        cancelText: 'Отмена',
+                        onOk: async () => {
+                          try {
+                            await api(`/assignments/${a.id}`, {
+                              method: 'DELETE',
+                            });
+                            message.success('Задание удалено');
+                            if (materialsFor === a.id) setMaterialsFor(null);
+                            if (editingId === a.id) resetDraft();
+                            qc.invalidateQueries({
+                              queryKey: ['assignments', courseId],
+                            });
+                          } catch (e) {
+                            message.error(
+                              e instanceof Error ? e.message : 'Ошибка',
+                            );
+                          }
+                        },
+                      });
+                    }}
+                  >
+                    Удалить
+                  </Button>
+                </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
           {!list.data?.length ? (
             <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-              Пока нет заданий
+              Пока нет заданий — добавьте вопросы слева и нажмите «Создать одно ДЗ»
             </Typography.Text>
           ) : null}
         </div>

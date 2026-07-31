@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { motion, useReducedMotion } from 'framer-motion';
 import { BookOutlined, CalendarOutlined, FormOutlined } from '@ant-design/icons';
 import { easeOutExpo, fadeUp, stagger } from '../../shared/motion';
+import { useAuth } from '../../shared/auth/AuthContext';
 
 const features = [
   {
@@ -25,6 +26,7 @@ const features = [
 export function LandingPage() {
   const nav = useNavigate();
   const reduce = useReducedMotion();
+  const { user } = useAuth();
 
   return (
     <div style={{ overflow: 'hidden' }}>
@@ -154,7 +156,7 @@ export function LandingPage() {
               <motion.div whileHover={{ scale: 1.04, y: -2 }} whileTap={{ scale: 0.97 }}>
                 <Button
                   size="large"
-                  onClick={() => nav('/login')}
+                  onClick={() => nav(user ? '/lk' : '/login')}
                   style={{
                     height: 48,
                     paddingInline: 28,
@@ -164,9 +166,25 @@ export function LandingPage() {
                     borderColor: 'rgba(190,170,242,0.5)',
                   }}
                 >
-                  Войти
+                  {user ? 'В кабинет' : 'Войти'}
                 </Button>
               </motion.div>
+              {!user ? (
+                <motion.div whileHover={{ scale: 1.04, y: -2 }} whileTap={{ scale: 0.97 }}>
+                  <Button
+                    size="large"
+                    type="link"
+                    onClick={() => nav('/login?tab=register')}
+                    style={{
+                      height: 48,
+                      fontWeight: 600,
+                      color: '#6b4fb8',
+                    }}
+                  >
+                    Регистрация
+                  </Button>
+                </motion.div>
+              ) : null}
             </Space>
           </motion.div>
         </motion.div>

@@ -12,6 +12,7 @@ import {
 } from '@prisma/client';
 import { CryptoService } from '../common/crypto/crypto.service';
 import { CourseAccessService } from '../enrollments/course-access.service';
+import { NotificationsService } from '../notifications/notifications.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuthUser } from '../rbac/auth-user';
 import {
@@ -25,6 +26,7 @@ export class SupportService {
     private readonly prisma: PrismaService,
     private readonly access: CourseAccessService,
     private readonly crypto: CryptoService,
+    private readonly notifications: NotificationsService,
   ) {}
 
   async create(actor: AuthUser, dto: CreateSupportThreadDto) {
@@ -58,6 +60,19 @@ export class SupportService {
         messages: { orderBy: { createdAt: 'asc' }, take: 1 },
       },
     });
+
+    try {
+      await this.notifications.notifyStaffSupportInbound({
+        threadId: thread.id,
+        channel: thread.channel,
+        courseId: thread.courseId,
+        subject: thread.subject,
+        preview: dto.body.trim(),
+        excludeUserId: actor.id,
+      });
+    } catch {
+      /* non-blocking */
+    }
 
     return this.serializeThread(thread, actor.id);
   }
@@ -148,6 +163,35 @@ export class SupportService {
         data: { lastMessageAt: new Date() },
       }),
     ]);
+
+    if (actor.id !== thread.createdById) {
+      // Staff reply → toast for the student
+      try {
+        await this.notifications.notifySupportReply({
+          studentId: thread.createdById,
+          threadId: id,
+          channel: thread.channel,
+          courseId: thread.courseId,
+          preview: dto.body.trim(),
+        });
+      } catch {
+        /* non-blocking */
+      }
+    } else {
+      // Student message → toast for staff (admin / curators)
+      try {
+        await this.notifications.notifyStaffSupportInbound({
+          threadId: id,
+          channel: thread.channel,
+          courseId: thread.courseId,
+          subject: thread.subject,
+          preview: dto.body.trim(),
+          excludeUserId: actor.id,
+        });
+      } catch {
+        /* non-blocking */
+      }
+    }
 
     return this.get(actor, id);
   }

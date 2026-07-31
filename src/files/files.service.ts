@@ -9,10 +9,11 @@ import {
   SubmissionStatus,
 } from '@prisma/client';
 import { CourseAccessService } from '../enrollments/course-access.service';
+import { LessonContentAccessService } from '../lessons/lesson-content-access.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuthUser } from '../rbac/auth-user';
 import { StorageService } from '../storage/storage.service';
-import { assertEventMaterial, assertPngOrPdf, decodeUploadFilename } from './files.mime';
+import { assertCourseMaterial, assertEventMaterial, assertPngOrPdf, decodeUploadFilename } from './files.mime';
 
 type OwnerContext = {
   courseId: string;
@@ -28,6 +29,7 @@ export class FilesService {
     private readonly prisma: PrismaService,
     private readonly access: CourseAccessService,
     private readonly storage: StorageService,
+    private readonly lessonContent: LessonContentAccessService,
   ) {}
 
   async upload(
@@ -40,6 +42,8 @@ export class FilesService {
     try {
       if (ownerType === StoredFileOwnerType.COURSE_EVENT_MATERIAL) {
         assertEventMaterial(file.mimetype || '', file.size);
+      } else if (ownerType === StoredFileOwnerType.COURSE_MATERIAL) {
+        assertCourseMaterial(file.mimetype || '', file.size);
       } else {
         assertPngOrPdf(file.mimetype || '', file.size);
       }
@@ -188,6 +192,18 @@ export class FilesService {
       };
     }
 
+    if (ownerType === StoredFileOwnerType.COURSE_MATERIAL) {
+      const course = await this.prisma.course.findUnique({
+        where: { id: ownerId },
+      });
+      if (!course) throw new NotFoundException('Course not found');
+      return {
+        courseId: course.id,
+        ownerType,
+        ownerId,
+      };
+    }
+
     throw new BadRequestException('Invalid ownerType');
   }
 
@@ -195,7 +211,8 @@ export class FilesService {
     if (
       ctx.ownerType === StoredFileOwnerType.LESSON_MATERIAL ||
       ctx.ownerType === StoredFileOwnerType.ASSIGNMENT_MATERIAL ||
-      ctx.ownerType === StoredFileOwnerType.COURSE_EVENT_MATERIAL
+      ctx.ownerType === StoredFileOwnerType.COURSE_EVENT_MATERIAL ||
+      ctx.ownerType === StoredFileOwnerType.COURSE_MATERIAL
     ) {
       if (!(await this.access.canManageCourse(actor, ctx.courseId))) {
         throw new ForbiddenException('Cannot manage this course');
@@ -215,6 +232,19 @@ export class FilesService {
   }
 
   private async assertCanRead(actor: AuthUser, ctx: OwnerContext) {
+    if (ctx.ownerType === StoredFileOwnerType.COURSE_MATERIAL) {
+      // Staff always; anyone (incl. guests via signed URLs on course page) —
+      // authenticated list: published course OR manage/content access
+      if (await this.access.canManageCourse(actor, ctx.courseId)) return;
+      const course = await this.prisma.course.findUnique({
+        where: { id: ctx.courseId },
+        select: { isPublished: true },
+      });
+      if (course?.isPublished) return;
+      if (await this.access.hasContentAccess(actor, ctx.courseId)) return;
+      throw new ForbiddenException('No access');
+    }
+
     if (
       ctx.ownerType === StoredFileOwnerType.LESSON_MATERIAL ||
       ctx.ownerType === StoredFileOwnerType.ASSIGNMENT_MATERIAL ||
@@ -222,6 +252,18 @@ export class FilesService {
     ) {
       if (!(await this.access.hasContentAccess(actor, ctx.courseId))) {
         throw new ForbiddenException('No access');
+      }
+      if (ctx.ownerType === StoredFileOwnerType.LESSON_MATERIAL) {
+        await this.lessonContent.assertContentOpen(actor, ctx.ownerId);
+      }
+      if (ctx.ownerType === StoredFileOwnerType.COURSE_EVENT_MATERIAL) {
+        const event = await this.prisma.courseEvent.findUnique({
+          where: { id: ctx.ownerId },
+          select: { lessonId: true },
+        });
+        if (event?.lessonId) {
+          await this.lessonContent.assertContentOpen(actor, event.lessonId);
+        }
       }
       return;
     }
@@ -241,7 +283,8 @@ export class FilesService {
     if (
       ctx.ownerType === StoredFileOwnerType.LESSON_MATERIAL ||
       ctx.ownerType === StoredFileOwnerType.ASSIGNMENT_MATERIAL ||
-      ctx.ownerType === StoredFileOwnerType.COURSE_EVENT_MATERIAL
+      ctx.ownerType === StoredFileOwnerType.COURSE_EVENT_MATERIAL ||
+      ctx.ownerType === StoredFileOwnerType.COURSE_MATERIAL
     ) {
       if (!(await this.access.canManageCourse(actor, ctx.courseId))) {
         throw new ForbiddenException('Cannot manage this course');

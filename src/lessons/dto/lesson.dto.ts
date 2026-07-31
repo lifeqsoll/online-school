@@ -2,11 +2,13 @@ import {
   IsBoolean,
   IsEnum,
   IsInt,
+  IsISO8601,
   IsOptional,
   IsString,
   IsUrl,
   MaxLength,
   Min,
+  ValidateIf,
 } from 'class-validator';
 import { LessonType } from '@prisma/client';
 
@@ -31,6 +33,25 @@ export class CreateLessonDto {
   @IsOptional()
   @IsBoolean()
   isPublished?: boolean;
+
+  @IsOptional()
+  @ValidateIf((_, v) => v !== null)
+  @IsISO8601()
+  scheduledAt?: string | null;
+
+  @IsOptional()
+  @ValidateIf((_, v) => v !== null && v !== '')
+  @IsUrl({ require_protocol: true })
+  meetingUrl?: string | null;
+
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  contentUnlockDaysBefore?: number;
+
+  @IsOptional()
+  @IsBoolean()
+  contentUnlockedForAll?: boolean;
 }
 
 export class UpdateLessonDto {
@@ -55,6 +76,26 @@ export class UpdateLessonDto {
   @IsOptional()
   @IsBoolean()
   isPublished?: boolean;
+
+  /** ISO datetime; null clears schedule and removes calendar event */
+  @IsOptional()
+  @ValidateIf((_, v) => v !== null)
+  @IsISO8601()
+  scheduledAt?: string | null;
+
+  @IsOptional()
+  @ValidateIf((_, v) => v !== null && v !== '')
+  @IsUrl({ require_protocol: true })
+  meetingUrl?: string | null;
+
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  contentUnlockDaysBefore?: number;
+
+  @IsOptional()
+  @IsBoolean()
+  contentUnlockedForAll?: boolean;
 }
 
 export class ExternalVideoDto {
@@ -65,4 +106,9 @@ export class ExternalVideoDto {
   @IsInt()
   @Min(0)
   durationSec?: number;
+}
+
+export class LessonContentGrantDto {
+  @IsString()
+  userId!: string;
 }

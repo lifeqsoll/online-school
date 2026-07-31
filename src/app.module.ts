@@ -31,6 +31,7 @@ import { AnalyticsModule } from './analytics/analytics.module';
 import { CourseEventsModule } from './course-events/course-events.module';
 import { FilesModule } from './files/files.module';
 import { SupportModule } from './support/support.module';
+import { NotificationsModule } from './notifications/notifications.module';
 import { ScheduleModule } from '@nestjs/schedule';
 import { JwtAuthGuard } from './rbac/guards/jwt-auth.guard';
 
@@ -78,6 +79,7 @@ import { JwtAuthGuard } from './rbac/guards/jwt-auth.guard';
     CourseEventsModule,
     FilesModule,
     SupportModule,
+    NotificationsModule,
     ImpersonationModule,
     HealthModule,
     Neo4jModule,

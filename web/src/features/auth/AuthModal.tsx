@@ -6,14 +6,24 @@ type Props = {
   open: boolean;
   onClose: () => void;
   onSuccess: () => void;
+  /** Which tab to open first */
+  defaultTab?: 'login' | 'register';
+  title?: string;
 };
 
-export function AuthModal({ open, onClose, onSuccess }: Props) {
+export function AuthModal({
+  open,
+  onClose,
+  onSuccess,
+  defaultTab = 'login',
+  title = 'Вход или регистрация',
+}: Props) {
   const { login, register } = useAuth();
 
   return (
-    <Modal open={open} onCancel={onClose} footer={null} destroyOnClose title="Вход">
+    <Modal open={open} onCancel={onClose} footer={null} destroyOnClose title={title}>
       <Tabs
+        defaultActiveKey={defaultTab}
         items={[
           {
             key: 'login',

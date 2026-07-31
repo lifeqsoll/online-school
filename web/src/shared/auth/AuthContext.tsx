@@ -11,6 +11,7 @@ export type AuthUser = {
   avatarUrl?: string | null;
   pendingEmail?: string | null;
   globalRole: 'ADMIN' | 'STUDENT';
+  notifyHwSubmitted?: boolean;
   impersonation?: unknown;
 };
 

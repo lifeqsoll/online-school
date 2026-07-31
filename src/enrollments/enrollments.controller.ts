@@ -26,4 +26,9 @@ export class EnrollmentsController {
   mine(@CurrentUser() user: AuthUser) {
     return this.enrollments.listMine(user.id);
   }
+
+  @Get('courses/:id/enrollments')
+  listForCourse(@CurrentUser() user: AuthUser, @Param('id') id: string) {
+    return this.enrollments.listForCourse(user, id);
+  }
 }

@@ -1,16 +1,37 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Button, Form, Input, Modal, Table, message } from 'antd';
+import { Button, Form, Input, Modal, Table, Tag, Typography, message } from 'antd';
 import { useState } from 'react';
 import { api } from '../../shared/api/client';
+
+type CourseEnrollment = {
+  id: string;
+  userId: string;
+  status: string;
+  source: 'FREE' | 'PAYMENT' | 'GRANT';
+  createdAt: string;
+  user: {
+    id: string;
+    displayName: string;
+    nickname?: string | null;
+    email?: string | null;
+    isActive: boolean;
+  };
+};
+
+const SOURCE_LABEL: Record<CourseEnrollment['source'], string> = {
+  FREE: 'Бесплатно',
+  PAYMENT: 'Оплата',
+  GRANT: 'Грант',
+};
 
 export function CourseStudents({ courseId }: { courseId: string }) {
   const qc = useQueryClient();
   const [open, setOpen] = useState(false);
 
-  // No dedicated course enrollment list — show grant UI + tip
-  const me = useQuery({
-    queryKey: ['my-enrollments'],
-    queryFn: () => api<Array<{ id: string; courseId: string; userId: string }>>('/me/enrollments'),
+  const list = useQuery({
+    queryKey: ['course-enrollments', courseId],
+    queryFn: () =>
+      api<CourseEnrollment[]>(`/courses/${courseId}/enrollments`),
   });
 
   const grant = useMutation({
@@ -22,25 +43,80 @@ export function CourseStudents({ courseId }: { courseId: string }) {
     onSuccess: () => {
       message.success('Доступ выдан');
       setOpen(false);
-      qc.invalidateQueries({ queryKey: ['my-enrollments'] });
+      qc.invalidateQueries({ queryKey: ['course-enrollments', courseId] });
     },
   });
 
   return (
     <div>
-      <Button type="primary" onClick={() => setOpen(true)} style={{ marginBottom: 12 }}>
-        Выдать доступ (grant)
-      </Button>
+      <div
+        style={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          gap: 12,
+          marginBottom: 12,
+          flexWrap: 'wrap',
+        }}
+      >
+        <Typography.Text type="secondary">
+          Все зачисленные ученики курса. Грантовые выделены отдельно.
+        </Typography.Text>
+        <Button type="primary" onClick={() => setOpen(true)}>
+          Выдать доступ (grant)
+        </Button>
+      </div>
       <Table
         rowKey="id"
-        dataSource={(me.data ?? []).filter((e) => e.courseId === courseId)}
+        loading={list.isLoading}
+        dataSource={list.data ?? []}
+        onRow={(row) =>
+          row.source === 'GRANT'
+            ? {
+                style: {
+                  background: '#fff7e6',
+                },
+              }
+            : {}
+        }
         columns={[
-          { title: 'Enrollment', dataIndex: 'id' },
-          { title: 'User', dataIndex: 'userId' },
+          {
+            title: 'Ученик',
+            render: (_, r) => (
+              <div>
+                <div style={{ fontWeight: 600 }}>{r.user.displayName}</div>
+                {r.user.email ? (
+                  <div style={{ fontSize: 12, color: '#8c8c8c' }}>{r.user.email}</div>
+                ) : null}
+              </div>
+            ),
+          },
+          {
+            title: 'Как попал',
+            dataIndex: 'source',
+            width: 140,
+            render: (source: CourseEnrollment['source']) =>
+              source === 'GRANT' ? (
+                <Tag color="gold">{SOURCE_LABEL[source]}</Tag>
+              ) : (
+                <Tag>{SOURCE_LABEL[source] ?? source}</Tag>
+              ),
+          },
+          {
+            title: 'Статус',
+            dataIndex: 'status',
+            width: 120,
+          },
+          {
+            title: 'ID',
+            dataIndex: 'userId',
+            ellipsis: true,
+            width: 200,
+          },
         ]}
-        locale={{ emptyText: 'Список enrolled учеников курса — через grant / admin users' }}
+        locale={{ emptyText: 'Пока нет зачисленных учеников' }}
       />
-      <Modal title="Grant enroll" open={open} onCancel={() => setOpen(false)} footer={null}>
+      <Modal title="Выдать доступ (grant)" open={open} onCancel={() => setOpen(false)} footer={null}>
         <Form
           layout="vertical"
           onFinish={async (v) => {

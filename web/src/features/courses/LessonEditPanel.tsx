@@ -1,8 +1,10 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   Button,
+  DatePicker,
   Form,
   Input,
+  InputNumber,
   Select,
   Space,
   Switch,
@@ -11,6 +13,8 @@ import {
   message,
   Modal,
 } from 'antd';
+import dayjs from 'dayjs';
+import { useState } from 'react';
 import { api, getAccessToken } from '../../shared/api/client';
 import { FileList, FileUploadButton } from '../../shared/files/FileList';
 
@@ -22,16 +26,23 @@ type Lesson = {
   isPublished: boolean;
   videoUrl?: string | null;
   videoSource?: string | null;
+  scheduledAt?: string | null;
+  meetingUrl?: string | null;
+  contentUnlockDaysBefore?: number;
+  contentUnlockedForAll?: boolean;
 };
 
 export function LessonEditPanel({
   lesson,
+  courseId,
   onClose,
 }: {
   lesson: Lesson;
+  courseId?: string;
   onClose: () => void;
 }) {
   const qc = useQueryClient();
+  const [grantUserId, setGrantUserId] = useState('');
 
   const save = useMutation({
     mutationFn: (v: {
@@ -39,6 +50,9 @@ export function LessonEditPanel({
       type: string;
       content?: string;
       isPublished: boolean;
+      scheduledAt: string | null;
+      meetingUrl: string | null;
+      contentUnlockDaysBefore: number;
     }) =>
       api(`/lessons/${lesson.id}`, {
         method: 'PATCH',
@@ -46,6 +60,10 @@ export function LessonEditPanel({
       }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['course'] });
+      if (courseId) {
+        qc.invalidateQueries({ queryKey: ['course-events', courseId] });
+      }
+      qc.invalidateQueries({ queryKey: ['me-calendar'] });
       message.success('Сохранено');
     },
   });
@@ -69,6 +87,9 @@ export function LessonEditPanel({
           content: lesson.content ?? '',
           isPublished: lesson.isPublished,
           externalUrl: lesson.videoUrl ?? '',
+          scheduledAt: lesson.scheduledAt ? dayjs(lesson.scheduledAt) : null,
+          meetingUrl: lesson.meetingUrl ?? '',
+          contentUnlockDaysBefore: lesson.contentUnlockDaysBefore ?? 7,
         }}
         onFinish={async (v) => {
           try {
@@ -77,6 +98,11 @@ export function LessonEditPanel({
               type: v.type,
               content: v.content || undefined,
               isPublished: v.isPublished,
+              scheduledAt: v.scheduledAt
+                ? (v.scheduledAt as dayjs.Dayjs).toISOString()
+                : null,
+              meetingUrl: v.meetingUrl?.trim() ? v.meetingUrl.trim() : null,
+              contentUnlockDaysBefore: Number(v.contentUnlockDaysBefore ?? 7),
             });
             if (v.externalUrl?.trim()) {
               await setExternal.mutateAsync(v.externalUrl.trim());
@@ -105,6 +131,113 @@ export function LessonEditPanel({
         <Form.Item name="isPublished" label="Опубликован" valuePropName="checked">
           <Switch />
         </Form.Item>
+
+        <Typography.Title level={5} style={{ marginTop: 8 }}>
+          Дата в календаре
+        </Typography.Title>
+        <Typography.Paragraph type="secondary" style={{ fontSize: 12 }}>
+          Дата ставит урок в календарь. Тип LIVE (иконка камеры) — только если
+          указана ссылка на встречу ниже. Текст / Видео / Смешанный — по
+          содержимому урока.
+        </Typography.Paragraph>
+        <Form.Item name="scheduledAt" label="Дата и время урока">
+          <DatePicker
+            showTime
+            format="DD.MM.YYYY HH:mm"
+            style={{ width: '100%' }}
+            allowClear
+            placeholder="Без даты — только в программе курса"
+          />
+        </Form.Item>
+        <Form.Item
+          name="meetingUrl"
+          label="Ссылка на встречу"
+          rules={[{ type: 'url', message: 'Нужен полный URL (https://...)' }]}
+        >
+          <Input placeholder="https://meet.jit.si/..." allowClear />
+        </Form.Item>
+
+        <Typography.Title level={5} style={{ marginTop: 8 }}>
+          Открытие материалов
+        </Typography.Title>
+        <Typography.Paragraph type="secondary" style={{ fontSize: 12 }}>
+          В календаре урок виден всегда. Видео, файлы и ссылка открываются за N
+          дней до даты (по умолчанию 7). Можно открыть всем сразу или одному
+          ученику по ID.
+        </Typography.Paragraph>
+        <Form.Item
+          name="contentUnlockDaysBefore"
+          label="Открыть материалы за N дней до урока"
+        >
+          <InputNumber min={0} max={365} style={{ width: '100%' }} />
+        </Form.Item>
+        <Space wrap style={{ marginBottom: 16 }}>
+          <Button
+            onClick={async () => {
+              try {
+                await api(`/lessons/${lesson.id}/content/unlock-all`, {
+                  method: 'POST',
+                });
+                message.success('Материалы открыты для всех');
+                qc.invalidateQueries({ queryKey: ['course'] });
+                qc.invalidateQueries({ queryKey: ['me-calendar'] });
+              } catch (e) {
+                message.error(e instanceof Error ? e.message : 'Ошибка');
+              }
+            }}
+          >
+            Открыть всем сейчас
+          </Button>
+          <Button
+            onClick={async () => {
+              try {
+                await api(`/lessons/${lesson.id}/content/lock-schedule`, {
+                  method: 'POST',
+                });
+                message.success('Снова по расписанию (N дней)');
+                qc.invalidateQueries({ queryKey: ['course'] });
+                qc.invalidateQueries({ queryKey: ['me-calendar'] });
+              } catch (e) {
+                message.error(e instanceof Error ? e.message : 'Ошибка');
+              }
+            }}
+          >
+            Вернуть расписание
+          </Button>
+        </Space>
+        {lesson.contentUnlockedForAll ? (
+          <Typography.Text type="success" style={{ display: 'block', marginBottom: 12 }}>
+            Сейчас открыто для всех вручную
+          </Typography.Text>
+        ) : null}
+        <Space.Compact style={{ width: '100%', marginBottom: 16 }}>
+          <Input
+            placeholder="User ID ученика"
+            value={grantUserId}
+            onChange={(e) => setGrantUserId(e.target.value)}
+          />
+          <Button
+            onClick={async () => {
+              if (!grantUserId.trim()) {
+                message.error('Укажите User ID');
+                return;
+              }
+              try {
+                await api(`/lessons/${lesson.id}/content/grants`, {
+                  method: 'POST',
+                  json: { userId: grantUserId.trim() },
+                });
+                message.success('Ученику открыт доступ к материалам');
+                setGrantUserId('');
+              } catch (e) {
+                message.error(e instanceof Error ? e.message : 'Ошибка');
+              }
+            }}
+          >
+            Открыть одному
+          </Button>
+        </Space.Compact>
+
         <Form.Item name="externalUrl" label="Внешнее видео (YouTube/Vimeo/URL)">
           <Input placeholder="https://..." />
         </Form.Item>
@@ -195,6 +328,11 @@ export function LessonEditPanel({
                     await api(`/lessons/${lesson.id}`, { method: 'DELETE' });
                     message.success('Урок удалён');
                     qc.invalidateQueries({ queryKey: ['course'] });
+                    if (courseId) {
+                      qc.invalidateQueries({
+                        queryKey: ['course-events', courseId],
+                      });
+                    }
                     onClose();
                   } catch (e) {
                     message.error(e instanceof Error ? e.message : 'Ошибка');

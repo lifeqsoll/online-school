@@ -64,11 +64,14 @@ export function SupportPanel({
   channel,
   title,
   allowCreate = true,
+  courseId: lockedCourseId,
 }: {
   mode: Mode;
   channel?: Channel;
   title: string;
   allowCreate?: boolean;
+  /** When set, only threads for this course; create uses this courseId */
+  courseId?: string;
 }) {
   const { user } = useAuth();
   const qc = useQueryClient();
@@ -78,7 +81,9 @@ export function SupportPanel({
   const [reply, setReply] = useState('');
 
   const listKey =
-    mode === 'mine' ? ['support-mine', channel] : ['support-inbox', channel];
+    mode === 'mine'
+      ? ['support-mine', channel, lockedCourseId]
+      : ['support-inbox', channel, lockedCourseId];
 
   const list = useQuery({
     queryKey: listKey,
@@ -86,8 +91,11 @@ export function SupportPanel({
       const path =
         mode === 'mine' ? '/support/threads/mine' : '/support/threads/inbox';
       const rows = await api<SupportThread[]>(path);
-      if (!channel) return rows;
-      return rows.filter((t) => t.channel === channel);
+      let filtered = channel ? rows.filter((t) => t.channel === channel) : rows;
+      if (lockedCourseId) {
+        filtered = filtered.filter((t) => t.courseId === lockedCourseId);
+      }
+      return filtered;
     },
   });
 
@@ -97,7 +105,7 @@ export function SupportPanel({
       api<Array<{ courseId: string; course: { id: string; title: string } }>>(
         '/me/enrollments',
       ),
-    enabled: allowCreate && channel === 'COURSE',
+    enabled: allowCreate && channel === 'COURSE' && !lockedCourseId,
   });
 
   const thread = useQuery({
@@ -413,7 +421,10 @@ export function SupportPanel({
             try {
               await create.mutateAsync({
                 channel: channel ?? v.channel,
-                courseId: channel === 'COURSE' ? v.courseId : undefined,
+                courseId:
+                  channel === 'COURSE'
+                    ? lockedCourseId || v.courseId
+                    : undefined,
                 subject: v.subject,
                 body: v.body,
               });
@@ -426,7 +437,7 @@ export function SupportPanel({
             }
           }}
         >
-          {channel === 'COURSE' ? (
+          {channel === 'COURSE' && !lockedCourseId ? (
             <Form.Item
               name="courseId"
               label="Курс"

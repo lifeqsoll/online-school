@@ -1,6 +1,8 @@
 import { SupportPanel } from '../../features/support/SupportPanel';
+import { useClearSupportBadge } from '../../shared/notifications/useClearSupportBadge';
 
 export function LkCourseSupportPage() {
+  useClearSupportBadge('COURSE');
   return (
     <SupportPanel
       mode="mine"
@@ -12,6 +14,7 @@ export function LkCourseSupportPage() {
 }
 
 export function LkTechSupportPage() {
+  useClearSupportBadge('TECH');
   return (
     <SupportPanel
       mode="mine"
@@ -29,6 +32,7 @@ export function StaffSupportInboxPage({
   channel: 'COURSE' | 'TECH';
   title: string;
 }) {
+  useClearSupportBadge(channel === 'TECH' ? 'STAFF_TECH' : 'STAFF_COURSE');
   return (
     <SupportPanel
       mode="inbox"

@@ -1,4 +1,5 @@
 import {
+  IsBoolean,
   IsOptional,
   IsString,
   Matches,
@@ -33,4 +34,9 @@ export class UpdateProfileDto {
   @IsString()
   @MaxLength(280)
   bio?: string;
+
+  /** Admin only: receive HW review toasts */
+  @IsOptional()
+  @IsBoolean()
+  notifyHwSubmitted?: boolean;
 }

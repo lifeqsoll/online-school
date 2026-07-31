@@ -3,6 +3,7 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
+import { SubmissionStatus } from '@prisma/client';
 import { CourseAccessService } from '../enrollments/course-access.service';
 import { Neo4jService } from '../neo4j/neo4j.service';
 import { PrismaService } from '../prisma/prisma.service';
@@ -31,18 +32,189 @@ export class AnalyticsService {
   }
 
   private async radarFor(userId: string, courseId: string) {
-    const topics = await this.prisma.topic.findMany({
+    const modules = await this.prisma.courseModule.findMany({
       where: { courseId },
       orderBy: { sortOrder: 'asc' },
+      include: {
+        lessons: {
+          where: { isPublished: true },
+          select: { id: true },
+        },
+        assignments: {
+          where: { isPublished: true },
+          select: {
+            id: true,
+            maxXp: true,
+            questions: { select: { points: true } },
+          },
+        },
+      },
     });
-    const masteries = await this.prisma.topicMastery.findMany({
-      where: { userId, courseId },
-    });
-    const byTopic = new Map(masteries.map((m) => [m.topicId, m]));
+
+    // Lesson-scoped HW that belongs to lessons in these modules
+    const lessonIds = modules.flatMap((m) => m.lessons.map((l) => l.id));
+    const lessonAssignments =
+      lessonIds.length === 0
+        ? []
+        : await this.prisma.assignment.findMany({
+            where: {
+              courseId,
+              isPublished: true,
+              lessonId: { in: lessonIds },
+            },
+            select: {
+              id: true,
+              lessonId: true,
+              maxXp: true,
+              questions: { select: { points: true } },
+            },
+          });
+
+    const lessonToModule = new Map<string, string>();
+    for (const m of modules) {
+      for (const l of m.lessons) lessonToModule.set(l.id, m.id);
+    }
+
+    const hwByModule = new Map<
+      string,
+      Array<{
+        id: string;
+        maxXp: number;
+        totalPoints: number;
+      }>
+    >();
+    for (const m of modules) {
+      hwByModule.set(
+        m.id,
+        m.assignments.map((a) => ({
+          id: a.id,
+          maxXp: a.maxXp,
+          totalPoints: a.questions.reduce((s, q) => s + q.points, 0),
+        })),
+      );
+    }
+    for (const a of lessonAssignments) {
+      if (!a.lessonId) continue;
+      const moduleId = lessonToModule.get(a.lessonId);
+      if (!moduleId) continue;
+      const list = hwByModule.get(moduleId) ?? [];
+      if (list.some((x) => x.id === a.id)) continue;
+      list.push({
+        id: a.id,
+        maxXp: a.maxXp,
+        totalPoints: a.questions.reduce((s, q) => s + q.points, 0),
+      });
+      hwByModule.set(moduleId, list);
+    }
+
+    const allLessonIds = modules.flatMap((m) => m.lessons.map((l) => l.id));
+    const allHwIds = [...hwByModule.values()].flatMap((list) =>
+      list.map((a) => a.id),
+    );
+
+    const [engagements, submissions] = await Promise.all([
+      allLessonIds.length
+        ? this.prisma.lessonEngagement.findMany({
+            where: { userId, lessonId: { in: allLessonIds } },
+            select: {
+              lessonId: true,
+              completedAt: true,
+              maxProgressPct: true,
+            },
+          })
+        : Promise.resolve([]),
+      allHwIds.length
+        ? this.prisma.submission.findMany({
+            where: {
+              userId,
+              assignmentId: { in: allHwIds },
+              status: {
+                in: [
+                  SubmissionStatus.AUTO_GRADED,
+                  SubmissionStatus.GRADED,
+                  SubmissionStatus.PENDING_REVIEW,
+                ],
+              },
+              OR: [{ scoreXp: { not: null } }, { scorePoints: { not: null } }],
+            },
+            select: {
+              assignmentId: true,
+              scoreXp: true,
+              scorePoints: true,
+            },
+          })
+        : Promise.resolve([]),
+    ]);
+
+    const lessonDone = new Set(
+      engagements
+        .filter((e) => e.completedAt != null || e.maxProgressPct >= 80)
+        .map((e) => e.lessonId),
+    );
+
+    const bestPctByHw = new Map<string, number>();
+    const hwMeta = new Map(
+      [...hwByModule.values()].flatMap((list) => list.map((a) => [a.id, a])),
+    );
+    for (const s of submissions) {
+      const meta = hwMeta.get(s.assignmentId);
+      if (!meta) continue;
+      let pct = 0;
+      if (meta.totalPoints > 0 && s.scorePoints != null) {
+        pct = (s.scorePoints / meta.totalPoints) * 100;
+      } else if (meta.maxXp > 0 && s.scoreXp != null) {
+        pct = (s.scoreXp / meta.maxXp) * 100;
+      }
+      const prev = bestPctByHw.get(s.assignmentId) ?? 0;
+      if (pct > prev) bestPctByHw.set(s.assignmentId, pct);
+    }
+
+    const labels: string[] = [];
+    const values: number[] = [];
+    const scaleValues: number[] = [];
+    const moduleIds: string[] = [];
+    const details: Array<{
+      moduleId: string;
+      earned: number;
+      total: number;
+      lessonsDone: number;
+      lessonsTotal: number;
+      hwDone: number;
+      hwTotal: number;
+    }> = [];
+
+    for (const m of modules) {
+      const lessons = m.lessons;
+      const hw = hwByModule.get(m.id) ?? [];
+      const total = lessons.length + hw.length;
+      const lessonsDone = lessons.filter((l) => lessonDone.has(l.id)).length;
+      const hwDone = hw.filter((a) => (bestPctByHw.get(a.id) ?? 0) >= 75)
+        .length;
+      const earned = lessonsDone + hwDone;
+      const pct = total === 0 ? 0 : Math.round((earned / total) * 100);
+      labels.push((m.radarLabel?.trim() || m.title).trim());
+      values.push(pct);
+      scaleValues.push(Math.round((pct / 100) * 8 * 10) / 10);
+      moduleIds.push(m.id);
+      details.push({
+        moduleId: m.id,
+        earned,
+        total,
+        lessonsDone,
+        lessonsTotal: lessons.length,
+        hwDone,
+        hwTotal: hw.length,
+      });
+    }
+
     return {
-      labels: topics.map((t) => t.name),
-      values: topics.map((t) => byTopic.get(t.id)?.scorePct ?? 0),
-      struggling: topics.map((t) => byTopic.get(t.id)?.struggling ?? false),
+      labels,
+      values,
+      scaleValues,
+      scaleMax: 8,
+      moduleIds,
+      details,
+      struggling: values.map((v) => v > 0 && v < 40),
     };
   }
 

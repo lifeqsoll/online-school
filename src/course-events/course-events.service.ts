@@ -6,6 +6,7 @@ import {
 } from '@nestjs/common';
 import { CourseEventType } from '@prisma/client';
 import { CourseAccessService } from '../enrollments/course-access.service';
+import { LessonContentAccessService } from '../lessons/lesson-content-access.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuthUser } from '../rbac/auth-user';
 import {
@@ -18,6 +19,7 @@ export class CourseEventsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly access: CourseAccessService,
+    private readonly lessonContent: LessonContentAccessService,
   ) {}
 
   async listCourseEvents(
@@ -43,7 +45,7 @@ export class CourseEventsService {
     await this.assertCourseExists(courseId);
     await this.validateLinks(courseId, dto.lessonId, dto.assignmentId);
 
-    return this.prisma.courseEvent.create({
+    const event = await this.prisma.courseEvent.create({
       data: {
         courseId,
         title: dto.title,
@@ -57,6 +59,19 @@ export class CourseEventsService {
         createdById: actor.realUserId,
       },
     });
+
+    if (event.type === CourseEventType.LIVE && event.lessonId) {
+      await this.prisma.courseEvent.deleteMany({
+        where: {
+          lessonId: event.lessonId,
+          type: CourseEventType.LIVE,
+          id: { not: event.id },
+        },
+      });
+    }
+
+    await this.syncLessonFromEvent(null, event);
+    return event;
   }
 
   async update(actor: AuthUser, id: string, dto: UpdateCourseEventDto) {
@@ -70,10 +85,14 @@ export class CourseEventsService {
       dto.lessonId === undefined ? event.lessonId : dto.lessonId;
     const assignmentId =
       dto.assignmentId === undefined ? event.assignmentId : dto.assignmentId;
-    await this.validateLinks(event.courseId, lessonId ?? undefined, assignmentId ?? undefined);
+    await this.validateLinks(
+      event.courseId,
+      lessonId ?? undefined,
+      assignmentId ?? undefined,
+    );
 
     const type = dto.type ?? event.type;
-    return this.prisma.courseEvent.update({
+    const updated = await this.prisma.courseEvent.update({
       where: { id },
       data: {
         title: dto.title,
@@ -99,6 +118,19 @@ export class CourseEventsService {
           dto.assignmentId === undefined ? undefined : dto.assignmentId,
       },
     });
+
+    if (updated.type === CourseEventType.LIVE && updated.lessonId) {
+      await this.prisma.courseEvent.deleteMany({
+        where: {
+          lessonId: updated.lessonId,
+          type: CourseEventType.LIVE,
+          id: { not: updated.id },
+        },
+      });
+    }
+
+    await this.syncLessonFromEvent(event, updated);
+    return updated;
   }
 
   async remove(actor: AuthUser, id: string) {
@@ -111,6 +143,12 @@ export class CourseEventsService {
       where: { ownerType: 'COURSE_EVENT_MATERIAL', ownerId: id },
     });
     await this.prisma.courseEvent.delete({ where: { id } });
+    if (event.type === CourseEventType.LIVE && event.lessonId) {
+      await this.prisma.lesson.updateMany({
+        where: { id: event.lessonId },
+        data: { scheduledAt: null, meetingUrl: null },
+      });
+    }
     return { ok: true };
   }
 
@@ -121,7 +159,7 @@ export class CourseEventsService {
     });
     const courseIds = enrollments.map((e) => e.courseId);
     if (!courseIds.length) return [];
-    return this.prisma.courseEvent.findMany({
+    const events = await this.prisma.courseEvent.findMany({
       where: {
         courseId: { in: courseIds },
         startsAt: { gte: from, lte: to },
@@ -129,6 +167,106 @@ export class CourseEventsService {
       orderBy: { startsAt: 'asc' },
       include: { course: { select: { id: true, title: true } } },
     });
+
+    const lessonIds = [
+      ...new Set(
+        events
+          .filter((e) => e.type === CourseEventType.LIVE && e.lessonId)
+          .map((e) => e.lessonId as string),
+      ),
+    ];
+    const lessons = lessonIds.length
+      ? await this.prisma.lesson.findMany({
+          where: { id: { in: lessonIds } },
+          select: {
+            id: true,
+            type: true,
+            videoSource: true,
+            videoUrl: true,
+            scheduledAt: true,
+            contentUnlockDaysBefore: true,
+            contentUnlockedForAll: true,
+            module: { select: { courseId: true } },
+          },
+        })
+      : [];
+
+    const lessonById = new Map(lessons.map((l) => [l.id, l]));
+
+    const byCourse = new Map<string, typeof lessons>();
+    for (const l of lessons) {
+      const list = byCourse.get(l.module.courseId) ?? [];
+      list.push(l);
+      byCourse.set(l.module.courseId, list);
+    }
+
+    const accessByLesson = new Map<string, boolean>();
+    for (const [courseId, list] of byCourse) {
+      const map = await this.lessonContent.evaluateMany(
+        actor,
+        list.map((l) => ({
+          id: l.id,
+          scheduledAt: l.scheduledAt,
+          contentUnlockDaysBefore: l.contentUnlockDaysBefore,
+          contentUnlockedForAll: l.contentUnlockedForAll,
+        })),
+        courseId,
+      );
+      for (const [id, a] of map) accessByLesson.set(id, a.open);
+    }
+
+    return events.map((e) => {
+      const contentOpen =
+        e.type === CourseEventType.LIVE && e.lessonId
+          ? (accessByLesson.get(e.lessonId) ?? true)
+          : true;
+      const linked = e.lessonId ? lessonById.get(e.lessonId) : undefined;
+      return {
+        ...e,
+        contentOpen,
+        meetingUrl: contentOpen ? e.meetingUrl : null,
+        lessonType: linked?.type ?? null,
+        lessonHasVideo: !!(linked?.videoSource || linked?.videoUrl),
+      };
+    });
+  }
+
+  /**
+   * Mirror LIVE event schedule onto the linked lesson (and clear old link).
+   */
+  private async syncLessonFromEvent(
+    previous: {
+      type: CourseEventType;
+      lessonId: string | null;
+    } | null,
+    next: {
+      type: CourseEventType;
+      lessonId: string | null;
+      startsAt: Date;
+      meetingUrl: string | null;
+    },
+  ) {
+    const prevLessonId =
+      previous?.type === CourseEventType.LIVE ? previous.lessonId : null;
+    const nextLessonId =
+      next.type === CourseEventType.LIVE ? next.lessonId : null;
+
+    if (prevLessonId && prevLessonId !== nextLessonId) {
+      await this.prisma.lesson.updateMany({
+        where: { id: prevLessonId },
+        data: { scheduledAt: null, meetingUrl: null },
+      });
+    }
+
+    if (nextLessonId) {
+      await this.prisma.lesson.update({
+        where: { id: nextLessonId },
+        data: {
+          scheduledAt: next.startsAt,
+          meetingUrl: next.meetingUrl,
+        },
+      });
+    }
   }
 
   private async assertCourseExists(courseId: string) {

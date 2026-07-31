@@ -37,6 +37,11 @@ export class UpdateCourseDto {
   description?: string;
 
   @IsOptional()
+  @IsString()
+  @MaxLength(12000)
+  catalogBody?: string;
+
+  @IsOptional()
   @IsInt()
   @Min(0)
   priceCents?: number;

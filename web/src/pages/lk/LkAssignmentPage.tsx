@@ -82,6 +82,8 @@ export function LkAssignmentPage() {
 
   const [submissionId, setSubmissionId] = useState<string | null>(null);
   const [answers, setAnswers] = useState<AnswersMap>({});
+  /** Last answers successfully written to the server (draft). */
+  const [savedAnswers, setSavedAnswers] = useState<AnswersMap>({});
   const [qIndex, setQIndex] = useState(0);
   const [phase, setPhase] = useState<'boot' | 'take' | 'results' | 'error'>('boot');
 
@@ -118,6 +120,7 @@ export function LkAssignmentPage() {
       const map: AnswersMap = {};
       for (const a of draft.answers) map[a.questionId] = a.value;
       setAnswers(map);
+      setSavedAnswers(map);
       setPhase('take');
       return;
     }
@@ -146,6 +149,7 @@ export function LkAssignmentPage() {
         const map: AnswersMap = {};
         for (const a of created.answers ?? []) map[a.questionId] = a.value;
         setAnswers(map);
+        setSavedAnswers(map);
         setPhase('take');
         void qc.invalidateQueries({
           queryKey: ['submissions-me', assignmentId],
@@ -224,6 +228,10 @@ export function LkAssignmentPage() {
     },
     onSuccess: (s) => {
       setSubmissionId(s.id);
+      const map: AnswersMap = {};
+      for (const a of s.answers ?? []) map[a.questionId] = a.value;
+      // Prefer server snapshot; fall back to what we just sent
+      setSavedAnswers(Object.keys(map).length ? map : { ...answers });
       message.success('Сохранено — можно продолжить позже');
       qc.invalidateQueries({ queryKey: ['submissions-me', assignmentId] });
     },
@@ -278,6 +286,9 @@ export function LkAssignmentPage() {
   const needsFile = mode === 'FILE' || mode === 'QUIZ_AND_FILE';
   const showQuiz = mode === 'QUIZ' || mode === 'QUIZ_AND_FILE';
   const current = questions[qIndex];
+  const currentSaveStatus = current
+    ? questionSaveStatus(answers[current.id], savedAnswers[current.id])
+    : 'empty';
   const resultSub =
     phase === 'results'
       ? (mine.data?.find((s) => s.id === submissionId) ?? latestDone)
@@ -316,6 +327,12 @@ export function LkAssignmentPage() {
             Баллы: {earned} из {totalPts}
             {totalPts ? ` / ${Math.round((earned / totalPts) * 100)}%` : ''}
           </Typography.Title>
+          {resultSub.status === 'PENDING_REVIEW' ? (
+            <Typography.Paragraph type="secondary" style={{ marginBottom: 0 }}>
+              Учтены баллы автопроверки. Развёрнутые ответы ещё на проверке —
+              итоговый результат и XP обновятся после оценки куратора.
+            </Typography.Paragraph>
+          ) : null}
         </div>
 
         {questions.map((q, i) => {
@@ -408,33 +425,91 @@ export function LkAssignmentPage() {
       ) : null}
 
       {showQuiz && questions.length > 0 ? (
-      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 20 }}>
-        {questions.map((q, i) => (
-          <button
-            key={q.id}
-            type="button"
-            onClick={() => setQIndex(i)}
-            style={{
-              width: 36,
-              height: 36,
-              borderRadius: '50%',
-              border: '2px solid #73d13d',
-              background: i === qIndex ? 'var(--accent)' : '#fff',
-              color: i === qIndex ? '#fff' : '#333',
-              cursor: 'pointer',
-              fontWeight: 600,
-            }}
-          >
-            {i + 1}
-          </button>
-        ))}
+      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 12 }}>
+        {questions.map((q, i) => {
+          const status = questionSaveStatus(answers[q.id], savedAnswers[q.id]);
+          const active = i === qIndex;
+          let border = '2px solid #d9d9d9';
+          let background = '#fff';
+          let color = '#595959';
+          if (active) {
+            border =
+              status === 'saved'
+                ? '2px solid #52c41a'
+                : status === 'draft'
+                  ? '2px solid #fa8c16'
+                  : '2px solid var(--accent)';
+            background = 'var(--accent)';
+            color = '#fff';
+          } else if (status === 'saved') {
+            border = '2px solid #52c41a';
+            background = '#f6ffed';
+            color = '#389e0d';
+          } else if (status === 'draft') {
+            border = '2px solid #fa8c16';
+            background = '#fff7e6';
+            color = '#d46b08';
+          }
+          return (
+            <button
+              key={q.id}
+              type="button"
+              title={
+                status === 'saved'
+                  ? 'Сохранено на сервере'
+                  : status === 'draft'
+                    ? 'Есть ответ, но ещё не сохранено'
+                    : 'Пока без ответа'
+              }
+              onClick={() => setQIndex(i)}
+              style={{
+                width: 36,
+                height: 36,
+                borderRadius: '50%',
+                border,
+                background,
+                color,
+                cursor: 'pointer',
+                fontWeight: 600,
+              }}
+            >
+              {i + 1}
+            </button>
+          );
+        })}
       </div>
+      ) : null}
+      {showQuiz && questions.length > 0 ? (
+        <Typography.Paragraph type="secondary" style={{ marginBottom: 16, fontSize: 12 }}>
+          Зелёный номер — ответ сохранён · оранжевый — есть правки, нажмите «Сохранить»
+        </Typography.Paragraph>
       ) : null}
 
       {showQuiz && current ? (
-        <div style={card}>
+        <div
+          style={{
+            ...card,
+            border:
+              currentSaveStatus === 'saved'
+                ? '1px solid #52c41a'
+                : currentSaveStatus === 'draft'
+                  ? '1px solid #fa8c16'
+                  : '1px solid #ebebeb',
+            background:
+              currentSaveStatus === 'saved'
+                ? '#f6ffed'
+                : currentSaveStatus === 'draft'
+                  ? '#fff7e6'
+                  : '#fff',
+          }}
+        >
           <Typography.Text type="secondary">
             Вопрос №{qIndex + 1} · {current.points} б.
+            {currentSaveStatus === 'saved'
+              ? ' · сохранено'
+              : currentSaveStatus === 'draft'
+                ? ' · не сохранено'
+                : ''}
           </Typography.Text>
           <Typography.Paragraph strong style={{ fontSize: 16, marginTop: 8 }}>
             {current.prompt}
@@ -502,6 +577,26 @@ export function LkAssignmentPage() {
       </Typography.Paragraph>
     </div>
   );
+}
+
+function hasAnswerValue(value: unknown): boolean {
+  if (value == null || value === '') return false;
+  if (Array.isArray(value)) return value.length > 0;
+  return String(value).trim().length > 0;
+}
+
+function sameAnswer(a: unknown, b: unknown): boolean {
+  return JSON.stringify(a ?? null) === JSON.stringify(b ?? null);
+}
+
+/** empty | draft (local only) | saved (matches server snapshot) */
+function questionSaveStatus(
+  current: unknown,
+  saved: unknown,
+): 'empty' | 'draft' | 'saved' {
+  if (!hasAnswerValue(current)) return 'empty';
+  if (hasAnswerValue(saved) && sameAnswer(current, saved)) return 'saved';
+  return 'draft';
 }
 
 function ChoiceInput({

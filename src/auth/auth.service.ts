@@ -273,6 +273,9 @@ export class AuthService {
       isActive: user.isActive,
       emailVerifiedAt: user.emailVerifiedAt,
       createdAt: user.createdAt,
+      ...(user.globalRole === 'ADMIN'
+        ? { notifyHwSubmitted: user.notifyHwSubmitted }
+        : {}),
     };
   }
 }

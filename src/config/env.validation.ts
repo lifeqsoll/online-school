@@ -63,6 +63,10 @@ class EnvironmentVariables {
 
   @IsOptional()
   @IsString()
+  WEB_APP_URL?: string;
+
+  @IsOptional()
+  @IsString()
   S3_ENDPOINT?: string;
 
   @IsOptional()

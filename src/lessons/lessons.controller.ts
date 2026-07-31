@@ -16,6 +16,7 @@ import { AuthUser } from '../rbac/auth-user';
 import {
   CreateLessonDto,
   ExternalVideoDto,
+  LessonContentGrantDto,
   UpdateLessonDto,
 } from './dto/lesson.dto';
 import { LessonsService } from './lessons.service';
@@ -33,6 +34,11 @@ export class LessonsController {
     return this.lessons.create(user, moduleId, dto);
   }
 
+  @Get('lessons/:id')
+  getOne(@CurrentUser() user: AuthUser, @Param('id') id: string) {
+    return this.lessons.getOne(user, id);
+  }
+
   @Patch('lessons/:id')
   update(
     @CurrentUser() user: AuthUser,
@@ -45,6 +51,39 @@ export class LessonsController {
   @Delete('lessons/:id')
   remove(@CurrentUser() user: AuthUser, @Param('id') id: string) {
     return this.lessons.remove(user, id);
+  }
+
+  @Post('lessons/:id/content/unlock-all')
+  unlockAll(@CurrentUser() user: AuthUser, @Param('id') id: string) {
+    return this.lessons.setContentUnlockedForAll(user, id, true);
+  }
+
+  @Post('lessons/:id/content/lock-schedule')
+  lockToSchedule(@CurrentUser() user: AuthUser, @Param('id') id: string) {
+    return this.lessons.setContentUnlockedForAll(user, id, false);
+  }
+
+  @Get('lessons/:id/content/grants')
+  listGrants(@CurrentUser() user: AuthUser, @Param('id') id: string) {
+    return this.lessons.listContentGrants(user, id);
+  }
+
+  @Post('lessons/:id/content/grants')
+  grant(
+    @CurrentUser() user: AuthUser,
+    @Param('id') id: string,
+    @Body() dto: LessonContentGrantDto,
+  ) {
+    return this.lessons.grantContent(user, id, dto.userId);
+  }
+
+  @Delete('lessons/:id/content/grants/:userId')
+  revokeGrant(
+    @CurrentUser() user: AuthUser,
+    @Param('id') id: string,
+    @Param('userId') userId: string,
+  ) {
+    return this.lessons.revokeContentGrant(user, id, userId);
   }
 
   @Patch('lessons/:id/video/external')

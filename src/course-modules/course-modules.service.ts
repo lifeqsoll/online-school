@@ -22,6 +22,7 @@ export class CourseModulesService {
         courseId,
         title: dto.title,
         description: dto.description,
+        radarLabel: dto.radarLabel?.trim() || null,
         sortOrder: dto.sortOrder ?? 0,
       },
     });
@@ -37,6 +38,9 @@ export class CourseModulesService {
         title: dto.title,
         description: dto.description,
         sortOrder: dto.sortOrder,
+        ...(dto.radarLabel !== undefined
+          ? { radarLabel: dto.radarLabel?.trim() || null }
+          : {}),
       },
     });
   }

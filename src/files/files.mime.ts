@@ -38,6 +38,27 @@ export function assertEventMaterial(mime: string, size: number): void {
   }
 }
 
+const COURSE_DOC_MIMES = new Set([
+  'application/pdf',
+  'application/msword',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  'application/vnd.ms-powerpoint',
+  'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+  'text/plain',
+]);
+
+/** Public catalog materials: images, PDF, office docs (no video — promo is separate). */
+export function assertCourseMaterial(mime: string, size: number): void {
+  const isImage = IMAGE_MIMES.has(mime);
+  const isDoc = COURSE_DOC_MIMES.has(mime);
+  if (!isImage && !isDoc) {
+    throw new Error('Allowed: PNG, JPEG, WebP, PDF, DOC/DOCX, PPT/PPTX, TXT');
+  }
+  if (size > MAX_PNG_PDF_BYTES) {
+    throw new Error('File exceeds 20 MB limit');
+  }
+}
+
 /** Multer often gives UTF-8 filenames decoded as latin1 (кириллица → ÐºÐ¸...). */
 export function decodeUploadFilename(name: string): string {
   if (!name) return 'file';

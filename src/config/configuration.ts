@@ -15,7 +15,8 @@ export default () => ({
   passwordResetTtlMinutes: 45,
   paymentProvider: process.env.PAYMENT_PROVIDER ?? 'mock',
   paymentReturnUrl:
-    process.env.PAYMENT_RETURN_URL ?? 'http://localhost:3000/catalog.html',
+    process.env.PAYMENT_RETURN_URL ?? 'http://localhost:5173/catalog',
+  webAppUrl: process.env.WEB_APP_URL ?? 'http://localhost:5173',
   s3: {
     endpoint: process.env.S3_ENDPOINT ?? 'http://localhost:9000',
     region: process.env.S3_REGION ?? 'us-east-1',

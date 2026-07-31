@@ -185,6 +185,11 @@ export function LkHomeworkPage() {
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ fontSize: 12, color: '#69b1ff' }}>
                       {typeLabel}
+                      {a.questions?.length
+                        ? ` · ${a.questions.length} ${
+                            a.questions.length === 1 ? 'вопрос' : 'вопр.'
+                          }`
+                        : ''}
                       {a.dueAt
                         ? ` · дедлайн ${dayjs(a.dueAt).format('D MMM / HH:mm')}`
                         : ''}

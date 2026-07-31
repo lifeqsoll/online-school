@@ -1,8 +1,9 @@
 import { ConfigProvider, Spin } from 'antd';
 import ruRU from 'antd/locale/ru_RU';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { QueryClient, QueryClientProvider, useQuery } from '@tanstack/react-query';
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
 import { AuthProvider, useAuth } from './shared/auth/AuthContext';
+import { api } from './shared/api/client';
 import { LoginPage } from './pages/LoginPage';
 import { ForgotPasswordPage } from './pages/ForgotPasswordPage';
 import { ResetPasswordPage } from './pages/ResetPasswordPage';
@@ -26,6 +27,7 @@ import { LkHomeworkPage } from './pages/lk/LkHomeworkPage';
 import { LkKnowledgePage } from './pages/lk/LkKnowledgePage';
 import { LkStatsPage } from './pages/lk/LkStatsPage';
 import { LkProfilePage } from './pages/lk/LkProfilePage';
+import { MockPaymentPage } from './pages/payments/MockPaymentPage';
 import {
   LkCourseSupportPage,
   LkTechSupportPage,
@@ -52,10 +54,31 @@ function Guard({
   role: 'ADMIN' | 'STAFF';
 }) {
   const { user, loading } = useAuth();
+  const managed = useQuery({
+    queryKey: ['courses', 'managed'],
+    queryFn: () => api<unknown[]>('/courses?managedOnly=true'),
+    enabled:
+      !!user && role === 'STAFF' && user.globalRole !== 'ADMIN',
+  });
+
   if (loading) return <Spin fullscreen />;
   if (!user) return <Navigate to="/login" replace />;
-  if (role === 'ADMIN' && user.globalRole !== 'ADMIN') {
-    return <Navigate to="/curator" replace />;
+
+  if (role === 'ADMIN') {
+    if (user.globalRole !== 'ADMIN') {
+      // Never dump students into curator panel
+      return <Navigate to="/lk" replace />;
+    }
+    return children;
+  }
+
+  // Curator panel: only real curators (or admins peeking)
+  if (user.globalRole === 'ADMIN') {
+    return children;
+  }
+  if (managed.isLoading) return <Spin fullscreen />;
+  if (!(managed.data?.length)) {
+    return <Navigate to="/lk" replace />;
   }
   return children;
 }
@@ -79,6 +102,7 @@ function AppRoutes() {
       <Route path="/login" element={<LoginPage />} />
       <Route path="/forgot-password" element={<ForgotPasswordPage />} />
       <Route path="/reset-password" element={<ResetPasswordPage />} />
+      <Route path="/payments/mock" element={<MockPaymentPage />} />
 
       <Route
         path="/lk"

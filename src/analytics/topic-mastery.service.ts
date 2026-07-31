@@ -22,7 +22,11 @@ export class TopicMasteryService {
           where: {
             userId,
             status: {
-              in: [SubmissionStatus.AUTO_GRADED, SubmissionStatus.GRADED],
+              in: [
+                SubmissionStatus.AUTO_GRADED,
+                SubmissionStatus.GRADED,
+                SubmissionStatus.PENDING_REVIEW,
+              ],
             },
           },
         },
@@ -72,7 +76,11 @@ export class TopicMasteryService {
               where: {
                 userId,
                 status: {
-                  in: [SubmissionStatus.AUTO_GRADED, SubmissionStatus.GRADED],
+                  in: [
+                    SubmissionStatus.AUTO_GRADED,
+                    SubmissionStatus.GRADED,
+                    SubmissionStatus.PENDING_REVIEW,
+                  ],
                 },
               },
             },

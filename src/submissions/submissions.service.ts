@@ -2,6 +2,7 @@ import {
   BadRequestException,
   ForbiddenException,
   Injectable,
+  Logger,
   NotFoundException,
 } from '@nestjs/common';
 import {
@@ -19,6 +20,7 @@ import {
   gradeChoice,
   gradeShort,
 } from '../grading/auto-grade';
+import { NotificationsService } from '../notifications/notifications.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuthUser } from '../rbac/auth-user';
 import { XpService } from '../xp/xp.service';
@@ -30,12 +32,15 @@ import {
 
 @Injectable()
 export class SubmissionsService {
+  private readonly logger = new Logger(SubmissionsService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly access: CourseAccessService,
     private readonly xp: XpService,
     private readonly mastery: TopicMasteryService,
     private readonly audit: AuditService,
+    private readonly notifications: NotificationsService,
   ) {}
 
   async createAttempt(user: AuthUser, assignmentId: string) {
@@ -262,12 +267,13 @@ export class SubmissionsService {
       ? SubmissionStatus.PENDING_REVIEW
       : SubmissionStatus.AUTO_GRADED;
 
+    // Always keep auto-graded points/XP even when OPEN/file still needs review.
     const updated = await this.prisma.submission.update({
       where: { id: submissionId },
       data: {
         status,
-        scorePoints: hasOpen ? null : earned,
-        scoreXp: hasOpen ? null : scoreXp,
+        scorePoints: earned,
+        scoreXp,
         submittedAt: new Date(),
         gradedAt: hasOpen ? null : new Date(),
       },
@@ -278,18 +284,39 @@ export class SubmissionsService {
       actorId: user.realUserId,
       targetId: user.id,
       action: AuditAction.SUBMISSION_SUBMIT,
-      meta: { submissionId, status },
+      meta: { submissionId, status, earned, provisional: hasOpen },
     });
 
-    if (!hasOpen) {
-      // 0 XP still syncs best-attempt record, but never increments balance
-      await this.xp.syncBestAttempt(
-        user.id,
-        assignment.courseId,
-        assignment.id,
-        submissionId,
-      );
-      await this.mastery.recomputeForUserAssignment(user.id, assignment.id);
+    // Provisional XP from auto-graded parts counts immediately; final grade adjusts delta.
+    await this.xp.syncBestAttempt(
+      user.id,
+      assignment.courseId,
+      assignment.id,
+      submissionId,
+    );
+    await this.mastery.recomputeForUserAssignment(user.id, assignment.id);
+
+    if (status === SubmissionStatus.PENDING_REVIEW) {
+      try {
+        const u = await this.prisma.user.findUnique({
+          where: { id: user.id },
+          select: { nickname: true },
+        });
+        await this.notifications.notifyStaffHwSubmitted({
+          courseId: assignment.courseId,
+          assignmentId: assignment.id,
+          assignmentTitle: assignment.title,
+          submissionId,
+          studentUserId: user.id,
+          studentLabel: u?.nickname?.trim() || 'Ученик',
+        });
+      } catch (err) {
+        this.logger.warn(
+          `notifyStaffHwSubmitted failed for submission ${submissionId}: ${
+            err instanceof Error ? err.message : String(err)
+          }`,
+        );
+      }
     }
 
     return updated;
@@ -458,6 +485,18 @@ export class SubmissionsService {
       submission.userId,
       submission.assignmentId,
     );
+
+    try {
+      await this.notifications.notifyHwGraded({
+        userId: submission.userId,
+        courseId: submission.assignment.courseId,
+        assignmentId: submission.assignmentId,
+        assignmentTitle: submission.assignment.title,
+        scoreXp,
+      });
+    } catch {
+      /* non-blocking */
+    }
 
     return updated;
   }

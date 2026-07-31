@@ -1,5 +1,10 @@
 import { useQuery } from '@tanstack/react-query';
-import { Spin, Typography } from 'antd';
+import { Button, Spin, Typography } from 'antd';
+import {
+  DownloadOutlined,
+  FileOutlined,
+  FileImageOutlined,
+} from '@ant-design/icons';
 import { useParams } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { api, getAccessToken } from '../../shared/api/client';
@@ -12,8 +17,17 @@ type CourseDetail = {
   id: string;
   title: string;
   description?: string | null;
+  catalogBody?: string | null;
   priceCents: number;
   coverUrl?: string | null;
+  promoPlayback?: { kind: string; url: string } | null;
+  catalogMaterials?: Array<{
+    id: string;
+    originalName: string;
+    mimeType: string;
+    sizeBytes: number;
+    url: string;
+  }>;
   modules: Array<{
     id: string;
     title: string;
@@ -22,6 +36,30 @@ type CourseDetail = {
 };
 
 type Enrollment = { courseId: string };
+
+function toEmbedUrl(url: string, kind: string): string {
+  if (kind === 'youtube') {
+    try {
+      const u = new URL(url);
+      const id = u.hostname.includes('youtu.be')
+        ? u.pathname.slice(1)
+        : u.searchParams.get('v');
+      if (id) return `https://www.youtube.com/embed/${id}`;
+    } catch {
+      /* */
+    }
+  }
+  if (kind === 'vimeo') {
+    const m = url.match(/vimeo\.com\/(\d+)/);
+    if (m) return `https://player.vimeo.com/video/${m[1]}`;
+  }
+  return url;
+}
+
+function formatSize(bytes: number) {
+  if (bytes >= 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} МБ`;
+  return `${Math.round(bytes / 1024)} КБ`;
+}
 
 export function PublicCoursePage() {
   const { idOrSlug = '' } = useParams();
@@ -177,6 +215,106 @@ export function PublicCoursePage() {
             </div>
           </div>
         </motion.div>
+
+        {c.promoPlayback || c.catalogBody ? (
+          <motion.div variants={fadeUp} custom={0.5} style={{ marginBottom: 24 }}>
+            <Typography.Title level={4} style={{ marginBottom: 14 }}>
+              О курсе
+            </Typography.Title>
+            {c.promoPlayback ? (
+              <div
+                style={{
+                  borderRadius: 18,
+                  overflow: 'hidden',
+                  background: '#111',
+                  aspectRatio: '16 / 9',
+                  border: '1px solid rgba(0,0,0,0.08)',
+                  boxShadow: '0 12px 40px rgba(20,16,40,0.12)',
+                  marginBottom: c.catalogBody ? 18 : 0,
+                }}
+              >
+                {c.promoPlayback.kind === 'youtube' ||
+                c.promoPlayback.kind === 'vimeo' ? (
+                  <iframe
+                    title="promo"
+                    src={toEmbedUrl(c.promoPlayback.url, c.promoPlayback.kind)}
+                    style={{ width: '100%', height: '100%', border: 0 }}
+                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                    allowFullScreen
+                  />
+                ) : (
+                  <video
+                    src={c.promoPlayback.url}
+                    controls
+                    playsInline
+                    style={{ width: '100%', height: '100%', objectFit: 'contain' }}
+                  />
+                )}
+              </div>
+            ) : null}
+            {c.catalogBody ? (
+              <Typography.Paragraph
+                style={{
+                  fontSize: 16,
+                  lineHeight: 1.7,
+                  whiteSpace: 'pre-wrap',
+                  marginBottom: 0,
+                  maxWidth: 720,
+                }}
+              >
+                {c.catalogBody}
+              </Typography.Paragraph>
+            ) : null}
+          </motion.div>
+        ) : null}
+
+        {(c.catalogMaterials?.length ?? 0) > 0 ? (
+          <motion.div variants={fadeUp} custom={0.7} style={{ marginBottom: 28 }}>
+            <Typography.Title level={4} style={{ marginBottom: 14 }}>
+              Материалы для ознакомления
+            </Typography.Title>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+              {c.catalogMaterials!.map((f) => {
+                const isImage = f.mimeType.startsWith('image/');
+                return (
+                  <div
+                    key={f.id}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 12,
+                      background: '#fff',
+                      borderRadius: 14,
+                      border: '1px solid rgba(190,170,242,0.25)',
+                      padding: '12px 16px',
+                    }}
+                  >
+                    <span style={{ color: '#6b4fb8', fontSize: 20 }}>
+                      {isImage ? <FileImageOutlined /> : <FileOutlined />}
+                    </span>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontWeight: 600 }}>{f.originalName}</div>
+                      <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+                        {formatSize(f.sizeBytes)}
+                      </Typography.Text>
+                    </div>
+                    <Button
+                      type="primary"
+                      ghost
+                      icon={<DownloadOutlined />}
+                      href={f.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      disabled={!f.url}
+                    >
+                      Скачать
+                    </Button>
+                  </div>
+                );
+              })}
+            </div>
+          </motion.div>
+        ) : null}
 
         <motion.div variants={fadeUp} custom={1}>
           <Typography.Title level={4} style={{ marginBottom: 14 }}>

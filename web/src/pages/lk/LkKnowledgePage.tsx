@@ -2,8 +2,6 @@ import { useQuery } from '@tanstack/react-query';
 import { Empty, Input, Typography, Tag } from 'antd';
 import {
   BookOutlined,
-  FileTextOutlined,
-  PlayCircleOutlined,
   SearchOutlined,
   RightOutlined,
   FolderOpenOutlined,
@@ -15,6 +13,11 @@ import { motion } from 'framer-motion';
 import { api } from '../../shared/api/client';
 import { FileList } from '../../shared/files/FileList';
 import { easeOutExpo } from '../../shared/motion';
+import {
+  LessonTypeIcon,
+  lessonKindLabel,
+  resolveLessonKind,
+} from '../../shared/lessons/lessonTypeIcon';
 
 type Enrollment = {
   courseId: string;
@@ -27,6 +30,8 @@ type Lesson = {
   type: string;
   content?: string | null;
   isPublished: boolean;
+  scheduledAt?: string | null;
+  meetingUrl?: string | null;
 };
 
 type Module = {
@@ -40,13 +45,6 @@ type CourseDetail = {
   title: string;
   modules: Module[];
 };
-
-function lessonIcon(type: string) {
-  if (type === 'VIDEO' || type === 'MIXED') {
-    return <PlayCircleOutlined style={{ color: '#6b4fb8' }} />;
-  }
-  return <FileTextOutlined style={{ color: '#8c8c8c' }} />;
-}
 
 export function LkKnowledgePage() {
   const enrollments = useQuery({
@@ -347,7 +345,7 @@ export function LkKnowledgePage() {
                               fontSize: 16,
                             }}
                           >
-                            {lessonIcon(l.type)}
+                            <LessonTypeIcon lesson={l} style={{ marginTop: 0, fontSize: 18 }} />
                           </div>
                           <div style={{ minWidth: 0 }}>
                             <div style={{ fontWeight: 600, marginBottom: 2 }}>
@@ -366,11 +364,7 @@ export function LkKnowledgePage() {
                                 type="secondary"
                                 style={{ fontSize: 12 }}
                               >
-                                {l.type === 'VIDEO'
-                                  ? 'Видеоурок'
-                                  : l.type === 'MIXED'
-                                    ? 'Текст + видео'
-                                    : 'Текстовый урок'}
+                                {lessonKindLabel(resolveLessonKind(l))}
                               </Typography.Text>
                             )}
                           </div>

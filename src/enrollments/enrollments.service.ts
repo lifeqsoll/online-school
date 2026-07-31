@@ -7,6 +7,7 @@ import {
 } from '@nestjs/common';
 import { AuditAction, EnrollmentSource } from '@prisma/client';
 import { AuditService } from '../audit/audit.service';
+import { CryptoService } from '../common/crypto/crypto.service';
 import { OutboxService } from '../outbox/outbox.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuthUser } from '../rbac/auth-user';
@@ -21,6 +22,7 @@ export class EnrollmentsService {
     private readonly audit: AuditService,
     private readonly outbox: OutboxService,
     private readonly storage: StorageService,
+    private readonly crypto: CryptoService,
   ) {}
 
   async enrollFree(user: AuthUser, courseId: string) {
@@ -121,5 +123,68 @@ export class EnrollmentsService {
         };
       }),
     );
+  }
+
+  async listForCourse(actor: AuthUser, courseId: string) {
+    if (!(await this.access.canManageCourse(actor, courseId))) {
+      throw new ForbiddenException();
+    }
+    const course = await this.prisma.course.findUnique({ where: { id: courseId } });
+    if (!course) throw new NotFoundException('Course not found');
+
+    const rows = await this.prisma.enrollment.findMany({
+      where: { courseId },
+      include: {
+        user: {
+          select: {
+            id: true,
+            nickname: true,
+            firstNameEnc: true,
+            lastNameEnc: true,
+            emailEnc: true,
+            isActive: true,
+          },
+        },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    return rows.map((row) => {
+      let displayName = 'Ученик';
+      let email: string | null = null;
+      try {
+        if (row.user.nickname?.trim()) {
+          displayName = row.user.nickname.trim();
+        } else {
+          const first = row.user.firstNameEnc
+            ? this.crypto.decrypt(row.user.firstNameEnc)
+            : '';
+          const last = row.user.lastNameEnc
+            ? this.crypto.decrypt(row.user.lastNameEnc)
+            : '';
+          displayName = `${first} ${last}`.trim() || 'Ученик';
+        }
+        email = this.crypto.decrypt(row.user.emailEnc);
+      } catch {
+        displayName = 'Ученик';
+        email = null;
+      }
+      return {
+        id: row.id,
+        courseId: row.courseId,
+        userId: row.userId,
+        status: row.status,
+        source: row.source,
+        grantedBy: row.grantedBy,
+        createdAt: row.createdAt,
+        user: {
+          id: row.user.id,
+          displayName,
+          nickname: row.user.nickname,
+          email,
+          isActive: row.user.isActive,
+        },
+      };
+    });
   }
 }

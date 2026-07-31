@@ -83,6 +83,34 @@ export class CoursesController {
     return this.courses.removeCover(user, id);
   }
 
+  @Patch(':id/promo-video/external')
+  setPromoExternal(
+    @CurrentUser() user: AuthUser,
+    @Param('id') id: string,
+    @Body(SanitizePipe) body: { url: string },
+  ) {
+    return this.courses.setPromoExternal(user, id, body.url);
+  }
+
+  @Post(':id/promo-video/upload')
+  @UseInterceptors(
+    FileInterceptor('file', {
+      limits: { fileSize: MAX_UPLOAD_BYTES },
+    }),
+  )
+  uploadPromo(
+    @CurrentUser() user: AuthUser,
+    @Param('id') id: string,
+    @UploadedFile() file: Express.Multer.File,
+  ) {
+    return this.courses.uploadPromoVideo(user, id, file);
+  }
+
+  @Delete(':id/promo-video')
+  removePromo(@CurrentUser() user: AuthUser, @Param('id') id: string) {
+    return this.courses.removePromoVideo(user, id);
+  }
+
   @Delete(':id')
   remove(@CurrentUser() user: AuthUser, @Param('id') id: string) {
     return this.courses.remove(user, id);

@@ -4,11 +4,18 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { AuditAction, MembershipRole, Prisma } from '@prisma/client';
+import { AuditAction, MembershipRole, Prisma, StoredFileOwnerType, VideoSource } from '@prisma/client';
 import { randomUUID } from 'crypto';
 import { AuditService } from '../audit/audit.service';
 import { CourseAccessService } from '../enrollments/course-access.service';
-import { IMAGE_MIMES, MAX_PNG_PDF_BYTES } from '../files/files.mime';
+import {
+  IMAGE_MIMES,
+  MAX_PNG_PDF_BYTES,
+  MAX_VIDEO_BYTES,
+  VIDEO_MIMES,
+} from '../files/files.mime';
+import { LessonContentAccessService } from '../lessons/lesson-content-access.service';
+import { classifyExternalVideoUrl } from '../lessons/video-url.util';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuthUser } from '../rbac/auth-user';
 import { StorageService } from '../storage/storage.service';
@@ -23,6 +30,7 @@ export class CoursesService {
     private readonly access: CourseAccessService,
     private readonly audit: AuditService,
     private readonly storage: StorageService,
+    private readonly lessonContent: LessonContentAccessService,
   ) {}
 
   async list(user?: AuthUser, opts?: { managedOnly?: boolean }) {
@@ -89,36 +97,86 @@ export class CoursesService {
       throw new NotFoundException('Course not found');
     }
 
-    if (canManage) return this.present(course);
+    if (canManage) return this.present(course, { withMaterials: true });
 
     if (hasAccess) {
-      return this.present({
+      const published = {
         ...course,
         modules: course.modules.map((m) => ({
           ...m,
           lessons: m.lessons.filter((l) => l.isPublished),
         })),
-      });
+      };
+      const allLessons = published.modules.flatMap((m) => m.lessons);
+      const accessMap = await this.lessonContent.evaluateMany(
+        user!,
+        allLessons.map((l) => ({
+          id: l.id,
+          scheduledAt: l.scheduledAt,
+          contentUnlockDaysBefore: l.contentUnlockDaysBefore,
+          contentUnlockedForAll: l.contentUnlockedForAll,
+        })),
+        course.id,
+      );
+      return this.present(
+        {
+          ...published,
+          modules: published.modules.map((m) => ({
+            ...m,
+            lessons: m.lessons.map((l) => {
+              const a = accessMap.get(l.id);
+              const open = a?.open ?? true;
+              if (open) {
+                return {
+                  ...l,
+                  contentOpen: true,
+                  unlocksAt: a?.unlocksAt ?? null,
+                };
+              }
+              return {
+                id: l.id,
+                title: l.title,
+                type: l.type,
+                sortOrder: l.sortOrder,
+                isPublished: l.isPublished,
+                scheduledAt: l.scheduledAt,
+                contentUnlockDaysBefore: l.contentUnlockDaysBefore,
+                contentOpen: false,
+                unlocksAt: a?.unlocksAt ?? null,
+                content: null,
+                meetingUrl: null,
+                videoUrl: null,
+                videoSource: null,
+                storageKey: undefined,
+              };
+            }),
+          })),
+        },
+        { withMaterials: true },
+      );
     }
 
-    return this.present({
-      ...course,
-      modules: course.modules.map((m) => ({
-        id: m.id,
-        title: m.title,
-        description: m.description,
-        sortOrder: m.sortOrder,
-        lessons: m.lessons
-          .filter((l) => l.isPublished)
-          .map((l) => ({
-            id: l.id,
-            title: l.title,
-            type: l.type,
-            sortOrder: l.sortOrder,
-            isPublished: l.isPublished,
-          })),
-      })),
-    });
+    return this.present(
+      {
+        ...course,
+        modules: course.modules.map((m) => ({
+          id: m.id,
+          title: m.title,
+          description: m.description,
+          sortOrder: m.sortOrder,
+          lessons: m.lessons
+            .filter((l) => l.isPublished)
+            .map((l) => ({
+              id: l.id,
+              title: l.title,
+              type: l.type,
+              sortOrder: l.sortOrder,
+              isPublished: l.isPublished,
+            })),
+        })),
+      },
+      { withMaterials: true },
+    );
   }
 
   async create(actor: AuthUser, dto: CreateCourseDto) {
@@ -165,6 +223,10 @@ export class CoursesService {
       data: {
         title: dto.title,
         description: dto.description,
+        catalogBody:
+          dto.catalogBody === undefined
+            ? undefined
+            : dto.catalogBody.trim() || null,
         priceCents: dto.priceCents,
         currency: dto.currency,
         isPublished: dto.isPublished,
@@ -185,6 +247,13 @@ export class CoursesService {
     if (existing.coverStorageKey) {
       try {
         await this.storage.deleteObject(existing.coverStorageKey);
+      } catch {
+        /* ignore */
+      }
+    }
+    if (existing.promoStorageKey) {
+      try {
+        await this.storage.deleteObject(existing.promoStorageKey);
       } catch {
         /* ignore */
       }
@@ -247,7 +316,94 @@ export class CoursesService {
       where: { id },
       data: { coverStorageKey: null },
     });
-    return this.present(updated);
+    return this.present(updated, { withMaterials: true });
+  }
+
+  async setPromoExternal(actor: AuthUser, id: string, url: string) {
+    await this.requireManage(actor, id);
+    let classified;
+    try {
+      classified = classifyExternalVideoUrl(url.trim());
+    } catch (e) {
+      throw new BadRequestException((e as Error).message);
+    }
+    const course = await this.prisma.course.findUnique({ where: { id } });
+    if (!course) throw new NotFoundException('Course not found');
+    if (course.promoStorageKey) {
+      try {
+        await this.storage.deleteObject(course.promoStorageKey);
+      } catch {
+        /* ignore */
+      }
+    }
+    const updated = await this.prisma.course.update({
+      where: { id },
+      data: {
+        promoVideoSource: VideoSource.EXTERNAL_URL,
+        promoVideoUrl: classified.url,
+        promoStorageKey: null,
+      },
+    });
+    return this.present(updated, { withMaterials: true });
+  }
+
+  async uploadPromoVideo(actor: AuthUser, id: string, file: Express.Multer.File) {
+    await this.requireManage(actor, id);
+    if (!file) throw new BadRequestException('file is required');
+    const mime = file.mimetype || '';
+    if (!VIDEO_MIMES.has(mime)) {
+      throw new BadRequestException('Allowed: MP4, WebM, MOV');
+    }
+    if (file.size > MAX_VIDEO_BYTES) {
+      throw new BadRequestException('Video exceeds 200 MB limit');
+    }
+    const course = await this.prisma.course.findUnique({ where: { id } });
+    if (!course) throw new NotFoundException('Course not found');
+
+    const ext =
+      mime === 'video/webm' ? 'webm' : mime === 'video/quicktime' ? 'mov' : 'mp4';
+    const key = `courses/${id}/promo/${randomUUID()}.${ext}`;
+    await this.storage.uploadObject(key, file.buffer, mime);
+
+    if (course.promoStorageKey) {
+      try {
+        await this.storage.deleteObject(course.promoStorageKey);
+      } catch {
+        /* ignore */
+      }
+    }
+
+    const updated = await this.prisma.course.update({
+      where: { id },
+      data: {
+        promoVideoSource: VideoSource.UPLOADED,
+        promoVideoUrl: null,
+        promoStorageKey: key,
+      },
+    });
+    return this.present(updated, { withMaterials: true });
+  }
+
+  async removePromoVideo(actor: AuthUser, id: string) {
+    await this.requireManage(actor, id);
+    const course = await this.prisma.course.findUnique({ where: { id } });
+    if (!course) throw new NotFoundException('Course not found');
+    if (course.promoStorageKey) {
+      try {
+        await this.storage.deleteObject(course.promoStorageKey);
+      } catch {
+        /* ignore */
+      }
+    }
+    const updated = await this.prisma.course.update({
+      where: { id },
+      data: {
+        promoVideoSource: null,
+        promoVideoUrl: null,
+        promoStorageKey: null,
+      },
+    });
+    return this.present(updated, { withMaterials: true });
   }
 
   async listCurators(actor: AuthUser, courseId: string) {
@@ -302,9 +458,30 @@ export class CoursesService {
     return this.present(course);
   }
 
-  private async present<T extends { coverStorageKey?: string | null }>(
+  private async present<
+    T extends {
+      id?: string;
+      coverStorageKey?: string | null;
+      promoStorageKey?: string | null;
+      promoVideoSource?: VideoSource | null;
+      promoVideoUrl?: string | null;
+    },
+  >(
     course: T,
-  ): Promise<Omit<T, 'coverStorageKey'> & { coverUrl: string | null }> {
+    opts?: { withMaterials?: boolean },
+  ): Promise<
+    Omit<T, 'coverStorageKey' | 'promoStorageKey'> & {
+      coverUrl: string | null;
+      promoPlayback: { kind: string; url: string } | null;
+      catalogMaterials?: Array<{
+        id: string;
+        originalName: string;
+        mimeType: string;
+        sizeBytes: number;
+        url: string;
+      }>;
+    }
+  > {
     let coverUrl: string | null = null;
     if (course.coverStorageKey) {
       try {
@@ -313,8 +490,84 @@ export class CoursesService {
         coverUrl = null;
       }
     }
-    const { coverStorageKey: _, ...rest } = course;
-    return { ...rest, coverUrl };
+
+    let promoPlayback: { kind: string; url: string } | null = null;
+    if (course.promoVideoSource === VideoSource.UPLOADED && course.promoStorageKey) {
+      try {
+        const url = await this.storage.getSignedGetUrl(course.promoStorageKey);
+        promoPlayback = { kind: 'direct', url };
+      } catch {
+        promoPlayback = null;
+      }
+    } else if (
+      course.promoVideoSource === VideoSource.EXTERNAL_URL &&
+      course.promoVideoUrl
+    ) {
+      try {
+        const c = classifyExternalVideoUrl(course.promoVideoUrl);
+        promoPlayback = { kind: c.kind, url: c.url };
+      } catch {
+        promoPlayback = { kind: 'direct', url: course.promoVideoUrl };
+      }
+    }
+
+    let catalogMaterials:
+      | Array<{
+          id: string;
+          originalName: string;
+          mimeType: string;
+          sizeBytes: number;
+          url: string;
+        }>
+      | undefined;
+    if (opts?.withMaterials && course.id) {
+      const rows = await this.prisma.storedFile.findMany({
+        where: {
+          ownerType: StoredFileOwnerType.COURSE_MATERIAL,
+          ownerId: course.id,
+        },
+        orderBy: { createdAt: 'asc' },
+        select: {
+          id: true,
+          originalName: true,
+          mimeType: true,
+          sizeBytes: true,
+          storageKey: true,
+        },
+      });
+      catalogMaterials = await Promise.all(
+        rows.map(async (r) => {
+          let url = '';
+          try {
+            url = await this.storage.getSignedGetUrl(r.storageKey);
+          } catch {
+            url = '';
+          }
+          return {
+            id: r.id,
+            originalName: r.originalName,
+            mimeType: r.mimeType,
+            sizeBytes: r.sizeBytes,
+            url,
+          };
+        }),
+      );
+    }
+
+    const {
+      coverStorageKey: _c,
+      promoStorageKey: _p,
+      ...rest
+    } = course as T & {
+      coverStorageKey?: string | null;
+      promoStorageKey?: string | null;
+    };
+    return {
+      ...(rest as Omit<T, 'coverStorageKey' | 'promoStorageKey'>),
+      coverUrl,
+      promoPlayback,
+      ...(catalogMaterials ? { catalogMaterials } : {}),
+    };
   }
 
   private async uniqueSlug(title: string): Promise<string> {

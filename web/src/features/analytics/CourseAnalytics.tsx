@@ -1,33 +1,38 @@
 import { useQuery } from '@tanstack/react-query';
 import { Select, Typography, Table } from 'antd';
 import {
-  Radar,
-  RadarChart,
-  PolarGrid,
-  PolarAngleAxis,
-  PolarRadiusAxis,
-  ResponsiveContainer,
   BarChart,
   Bar,
   XAxis,
   YAxis,
   Tooltip,
+  ResponsiveContainer,
 } from 'recharts';
 import { useState } from 'react';
 import { api } from '../../shared/api/client';
 import { KnowledgeGraph } from './KnowledgeGraph';
+import { WindRoseChart } from '../../shared/analytics/WindRoseChart';
+
+type EnrollmentRow = {
+  userId: string;
+  user?: {
+    email?: string | null;
+    nickname?: string | null;
+    displayName?: string;
+    firstName?: string;
+  };
+};
 
 export function CourseAnalytics({ courseId }: { courseId: string }) {
   const [userId, setUserId] = useState<string>();
 
   const students = useQuery({
     queryKey: ['enrollments-course', courseId],
-    // backend has no list-by-course enrollments endpoint publicly — use submissions/users fallback
     queryFn: async () => {
       try {
-        return await api<Array<{ id: string; email?: string }>>('/admin/users');
+        return await api<EnrollmentRow[]>(`/courses/${courseId}/enrollments`);
       } catch {
-        return [] as Array<{ id: string; email?: string }>;
+        return [] as EnrollmentRow[];
       }
     },
   });
@@ -36,9 +41,12 @@ export function CourseAnalytics({ courseId }: { courseId: string }) {
     queryKey: ['radar', courseId, userId],
     enabled: !!userId,
     queryFn: () =>
-      api<{ labels: string[]; values: number[]; struggling: boolean[] }>(
-        `/courses/${courseId}/analytics/radar/${userId}`,
-      ),
+      api<{
+        labels: string[];
+        values: number[];
+        scaleValues?: number[];
+        scaleMax?: number;
+      }>(`/courses/${courseId}/analytics/radar/${userId}`),
   });
 
   const cold = useQuery({
@@ -63,43 +71,38 @@ export function CourseAnalytics({ courseId }: { courseId: string }) {
       ),
   });
 
-  const radarData =
-    radar.data?.labels.map((label, i) => ({
-      topic: label,
-      value: radar.data?.values[i] ?? 0,
-      fullMark: 100,
-    })) ?? [];
-
   return (
     <div className="flex flex-col gap-6">
       <div>
         <Typography.Title level={5}>Роза ветров ученика</Typography.Title>
+        <Typography.Paragraph type="secondary" style={{ marginTop: 0 }}>
+          По модулям: пройденные уроки + ДЗ ≥75%
+        </Typography.Paragraph>
         <Select
           style={{ width: 320, marginBottom: 12 }}
-          placeholder="Выберите ученика (admin users)"
+          placeholder="Выберите ученика"
           options={(students.data ?? []).map((u) => ({
-            value: u.id,
-            label: u.email || u.id,
+            value: u.userId,
+            label:
+              u.user?.displayName ||
+              u.user?.nickname ||
+              u.user?.firstName ||
+              u.user?.email ||
+              u.userId,
           }))}
           onChange={setUserId}
           showSearch
+          optionFilterProp="label"
         />
-        <div style={{ width: '100%', height: 320 }}>
-          <ResponsiveContainer>
-            <RadarChart data={radarData}>
-              <PolarGrid />
-              <PolarAngleAxis dataKey="topic" />
-              <PolarRadiusAxis angle={30} domain={[0, 100]} />
-              <Radar
-                name="Mastery"
-                dataKey="value"
-                stroke="#beaaf2"
-                fill="#beaaf2"
-                fillOpacity={0.45}
-              />
-            </RadarChart>
-          </ResponsiveContainer>
-        </div>
+        <WindRoseChart
+          data={userId ? radar.data : undefined}
+          loading={!!userId && radar.isLoading}
+          emptyText={
+            userId
+              ? 'Нет модулей или данных'
+              : 'Выберите ученика, чтобы увидеть розу'
+          }
+        />
       </div>
 
       <div>

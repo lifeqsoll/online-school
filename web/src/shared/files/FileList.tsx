@@ -2,6 +2,8 @@ import { Button, Modal, Typography, message } from 'antd';
 import {
   DeleteOutlined,
   DownloadOutlined,
+  EyeOutlined,
+  FileImageOutlined,
   FileOutlined,
   PlayCircleOutlined,
 } from '@ant-design/icons';
@@ -13,7 +15,8 @@ export type FileOwnerType =
   | 'LESSON_MATERIAL'
   | 'ASSIGNMENT_MATERIAL'
   | 'SUBMISSION_ATTACHMENT'
-  | 'COURSE_EVENT_MATERIAL';
+  | 'COURSE_EVENT_MATERIAL'
+  | 'COURSE_MATERIAL';
 
 export type StoredFileRow = {
   id: string;
@@ -34,6 +37,26 @@ function isImageMime(mime: string) {
 function formatSize(bytes: number) {
   if (bytes >= 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} МБ`;
   return `${Math.round(bytes / 1024)} КБ`;
+}
+
+function FileKindIcon({ mime }: { mime: string }) {
+  if (isVideoMime(mime)) {
+    return (
+      <PlayCircleOutlined
+        style={{ color: '#6b4fb8', marginTop: 3, flexShrink: 0 }}
+      />
+    );
+  }
+  if (isImageMime(mime)) {
+    return (
+      <FileImageOutlined
+        style={{ color: '#13c2c2', marginTop: 3, flexShrink: 0 }}
+      />
+    );
+  }
+  return (
+    <FileOutlined style={{ color: '#8c8c8c', marginTop: 3, flexShrink: 0 }} />
+  );
 }
 
 export function FileList({
@@ -114,15 +137,7 @@ export function FileList({
                   alignItems: 'flex-start',
                 }}
               >
-                {video || image ? (
-                  <PlayCircleOutlined
-                    style={{ color: '#6b4fb8', marginTop: 3, flexShrink: 0 }}
-                  />
-                ) : (
-                  <FileOutlined
-                    style={{ color: '#8c8c8c', marginTop: 3, flexShrink: 0 }}
-                  />
-                )}
+                <FileKindIcon mime={f.mimeType} />
                 <div style={{ minWidth: 0, wordBreak: 'break-word' }}>
                   <div style={{ lineHeight: 1.35 }}>{f.originalName}</div>
                   <Typography.Text type="secondary" style={{ fontSize: 12 }}>
@@ -145,8 +160,10 @@ export function FileList({
                   size="small"
                   style={{ paddingInline: 6 }}
                   icon={
-                    video || image ? (
+                    video ? (
                       <PlayCircleOutlined />
+                    ) : image ? (
+                      <EyeOutlined />
                     ) : (
                       <DownloadOutlined />
                     )

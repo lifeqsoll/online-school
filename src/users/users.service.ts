@@ -50,6 +50,15 @@ export class UsersService {
       const nick = dto.nickname.trim();
       data.nickname = nick.length ? nick : null;
     }
+    if (dto.notifyHwSubmitted !== undefined) {
+      const existing = await this.prisma.user.findUnique({
+        where: { id },
+        select: { globalRole: true },
+      });
+      if (existing?.globalRole === 'ADMIN') {
+        data.notifyHwSubmitted = dto.notifyHwSubmitted;
+      }
+    }
 
     try {
       const user = await this.prisma.user.update({

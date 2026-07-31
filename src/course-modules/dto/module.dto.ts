@@ -1,4 +1,11 @@
-import { IsInt, IsOptional, IsString, MaxLength, Min } from 'class-validator';
+import {
+  IsInt,
+  IsOptional,
+  IsString,
+  MaxLength,
+  Min,
+  ValidateIf,
+} from 'class-validator';
 
 export class CreateModuleDto {
   @IsString()
@@ -9,6 +16,11 @@ export class CreateModuleDto {
   @IsString()
   @MaxLength(2000)
   description?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(80)
+  radarLabel?: string;
 
   @IsOptional()
   @IsInt()
@@ -26,6 +38,12 @@ export class UpdateModuleDto {
   @IsString()
   @MaxLength(2000)
   description?: string;
+
+  @IsOptional()
+  @ValidateIf((_, v) => v !== null)
+  @IsString()
+  @MaxLength(80)
+  radarLabel?: string | null;
 
   @IsOptional()
   @IsInt()

@@ -21,7 +21,11 @@ export type CalEvent = {
   endsAt?: string | null;
   meetingUrl?: string | null;
   lessonId?: string | null;
+  /** Lesson content type: VIDEO | TEXT | MIXED */
+  lessonType?: string | null;
+  lessonHasVideo?: boolean;
   assignmentId?: string | null;
+  contentOpen?: boolean;
   course?: { id: string; title: string };
 };
 
@@ -125,11 +129,16 @@ function EventModal({
         {dayjs(event.startsAt).format('D MMMM YYYY, HH:mm')}
         {event.endsAt ? ` — ${dayjs(event.endsAt).format('HH:mm')}` : ''}
       </Typography.Paragraph>
-      {isLive && event.meetingUrl && (
+      {isLive && event.meetingUrl && event.contentOpen !== false && (
         <a href={event.meetingUrl} target="_blank" rel="noreferrer">
           Ссылка на встречу
         </a>
       )}
+      {isLive && event.contentOpen === false ? (
+        <Typography.Paragraph type="secondary" style={{ marginTop: 8 }}>
+          Материалы и ссылка откроются ближе к дате урока
+        </Typography.Paragraph>
+      ) : null}
       <div style={{ marginTop: 16, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
         {isLive && event.lessonId && event.course && (
           <motion.button

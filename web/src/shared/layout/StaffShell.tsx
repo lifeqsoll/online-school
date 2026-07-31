@@ -1,4 +1,4 @@
-import { Layout, Menu, Typography, Button, Tag, Space } from 'antd';
+import { Layout, Menu, Typography, Button, Tag, Space, Badge } from 'antd';
 import {
   BookOutlined,
   DashboardOutlined,
@@ -16,10 +16,14 @@ import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../shared/auth/AuthContext';
 import { useEffect, useState, type ReactNode } from 'react';
 import { AnimatedOutlet } from './AnimatedOutlet';
+import {
+  NotificationsBell,
+  useUnreadCounts,
+} from '../notifications/NotificationsBell';
 
 const { Header, Sider, Content } = Layout;
 
-type Item = { key: string; icon: ReactNode; label: string };
+type Item = { key: string; icon: ReactNode; label: string; badge?: number };
 
 const SIDEBAR_KEY = 'os_staff_sidebar_open';
 
@@ -35,6 +39,12 @@ export function StaffShell({
   const loc = useLocation();
   const nav = useNavigate();
   const { user, logout } = useAuth();
+  const unread = useUnreadCounts();
+  const supportBadge =
+    base === '/admin'
+      ? (unread.data?.staffTech ?? 0)
+      : (unread.data?.staffCourse ?? 0);
+
   const [open, setOpen] = useState(() => {
     const saved = localStorage.getItem(SIDEBAR_KEY);
     if (saved === '0') return false;
@@ -51,6 +61,24 @@ export function StaffShell({
       .sort((a, b) => b.key.length - a.key.length)
       .find((i) => loc.pathname === i.key || loc.pathname.startsWith(i.key + '/'))
       ?.key ?? items[0]?.key;
+
+  const menuItems = items.map((i) => {
+    const isSupport = i.key.endsWith('/support');
+    const badge = isSupport ? supportBadge : (i.badge ?? 0);
+    return {
+      key: i.key,
+      icon: (
+        <Badge dot={badge > 0} offset={[-2, 2]} color="#6b4fb8">
+          {i.icon}
+        </Badge>
+      ),
+      label: (
+        <Link to={i.key} style={{ color: badge > 0 ? '#6b4fb8' : undefined }}>
+          {i.label}
+        </Link>
+      ),
+    };
+  });
 
   return (
     <Layout className="min-h-full">
@@ -84,11 +112,7 @@ export function StaffShell({
         <Menu
           mode="inline"
           selectedKeys={selected ? [selected] : []}
-          items={items.map((i) => ({
-            key: i.key,
-            icon: i.icon,
-            label: <Link to={i.key}>{i.label}</Link>,
-          }))}
+          items={menuItems}
           style={{ borderInlineEnd: 0 }}
           onClick={() => {
             if (window.innerWidth < 992) setOpen(false);
@@ -116,6 +140,7 @@ export function StaffShell({
             <Typography.Text type="secondary">Панель управления</Typography.Text>
           </Space>
           <Space>
+            <NotificationsBell />
             <button
               type="button"
               onClick={() => nav(`${base}/profile`)}

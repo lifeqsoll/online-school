@@ -1,4 +1,4 @@
-import { Button, Space } from 'antd';
+import { Badge, Button, Space } from 'antd';
 import {
   HomeOutlined,
   CalendarOutlined,
@@ -7,6 +7,7 @@ import {
   BookOutlined,
   BarChartOutlined,
   CustomerServiceOutlined,
+  ShopOutlined,
 } from '@ant-design/icons';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
@@ -17,6 +18,10 @@ import { api } from '../api/client';
 import { AnimatedOutlet } from './AnimatedOutlet';
 import { easeOutExpo } from '../motion';
 import { XpRankWidget } from '../xp/XpRankWidget';
+import {
+  NotificationsBell,
+  useUnreadCounts,
+} from '../notifications/NotificationsBell';
 
 const COLLAPSED = 72;
 const EXPANDED = 200;
@@ -52,16 +57,20 @@ export function StudentShell() {
     enabled: courseIds.length > 0,
   });
 
+  const unread = useUnreadCounts();
+
   const items = [
-    { key: '/lk', icon: <HomeOutlined />, title: 'Главная' },
-    { key: '/lk/calendar', icon: <CalendarOutlined />, title: 'Календарь' },
-    { key: '/lk/homework', icon: <FormOutlined />, title: 'Домашки' },
-    { key: '/lk/knowledge', icon: <BookOutlined />, title: 'База знаний' },
-    { key: '/lk/stats', icon: <BarChartOutlined />, title: 'Статистика' },
+    { key: '/lk', icon: <HomeOutlined />, title: 'Главная', badge: 0 },
+    { key: '/lk/calendar', icon: <CalendarOutlined />, title: 'Календарь', badge: 0 },
+    { key: '/lk/homework', icon: <FormOutlined />, title: 'Домашки', badge: 0 },
+    { key: '/lk/knowledge', icon: <BookOutlined />, title: 'База знаний', badge: 0 },
+    { key: '/lk/stats', icon: <BarChartOutlined />, title: 'Статистика', badge: 0 },
+    { key: '/catalog', icon: <ShopOutlined />, title: 'Каталог', badge: 0 },
     {
       key: '/lk/support/tech',
       icon: <CustomerServiceOutlined />,
       title: 'Техподдержка',
+      badge: unread.data?.supportTech ?? 0,
     },
   ];
 
@@ -176,15 +185,27 @@ export function StudentShell() {
                       display: 'inline-flex',
                       justifyContent: 'center',
                       flexShrink: 0,
+                      position: 'relative',
                     }}
                   >
-                    {i.icon}
+                    <Badge
+                      dot={i.badge > 0}
+                      offset={[-2, 2]}
+                      color="#6b4fb8"
+                    >
+                      {i.icon}
+                    </Badge>
                   </span>
                   <span
                     style={{
                       fontSize: 13,
                       fontWeight: active ? 600 : 500,
-                      color: active ? '#6b4fb8' : '#595959',
+                      color:
+                        i.badge > 0 && !active
+                          ? '#6b4fb8'
+                          : active
+                            ? '#6b4fb8'
+                            : '#595959',
                       opacity: open ? 1 : 0,
                       transition: 'opacity 0.18s ease',
                       pointerEvents: 'none',
@@ -212,6 +233,7 @@ export function StudentShell() {
           }}
         >
           <Space size="middle" align="center">
+            <NotificationsBell />
             <XpRankWidget totalXp={totalXp} />
             <button
               type="button"

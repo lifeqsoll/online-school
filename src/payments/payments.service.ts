@@ -46,9 +46,16 @@ export class PaymentsService {
       },
     });
     if (pending) {
+      const webAppUrl = (
+        this.config.get<string>('webAppUrl') ?? 'http://localhost:5173'
+      ).replace(/\/$/, '');
+      const returnUrl = encodeURIComponent(
+        this.config.getOrThrow<string>('paymentReturnUrl'),
+      );
+      const confirmationUrl = `${webAppUrl}/payments/mock?paymentId=${encodeURIComponent(pending.id)}&returnUrl=${returnUrl}`;
       return {
         payment: pending,
-        confirmationUrl: pending.confirmationUrl,
+        confirmationUrl,
       };
     }
 
@@ -87,6 +94,35 @@ export class PaymentsService {
     });
 
     return { payment: updated, confirmationUrl: created.confirmationUrl };
+  }
+
+  async getPayment(actor: AuthUser, paymentId: string) {
+    const payment = await this.prisma.payment.findUnique({
+      where: { id: paymentId },
+      include: {
+        course: { select: { id: true, title: true, slug: true } },
+      },
+    });
+    if (!payment) throw new NotFoundException('Payment not found');
+
+    const isOwner =
+      payment.userId === actor.id || payment.userId === actor.realUserId;
+    const isAdmin = actor.realGlobalRole === 'ADMIN';
+    if (!isOwner && !isAdmin) {
+      throw new ForbiddenException('Cannot view this payment');
+    }
+
+    return {
+      id: payment.id,
+      status: payment.status,
+      amountCents: payment.amountCents,
+      currency: payment.currency,
+      provider: payment.provider,
+      courseId: payment.courseId,
+      course: payment.course,
+      createdAt: payment.createdAt,
+      confirmationUrl: payment.confirmationUrl,
+    };
   }
 
   async mockConfirm(actor: AuthUser, paymentId: string) {
@@ -149,5 +185,76 @@ export class PaymentsService {
     });
 
     return result;
+  }
+
+  async mockFail(actor: AuthUser, paymentId: string) {
+    const payment = await this.prisma.payment.findUnique({
+      where: { id: paymentId },
+    });
+    if (!payment) throw new NotFoundException('Payment not found');
+
+    const isOwner =
+      payment.userId === actor.id || payment.userId === actor.realUserId;
+    const isAdmin = actor.realGlobalRole === 'ADMIN';
+    if (!isOwner && !isAdmin) {
+      throw new ForbiddenException('Cannot fail this payment');
+    }
+
+    if (payment.status === PaymentStatus.SUCCEEDED) {
+      throw new BadRequestException('Payment already succeeded');
+    }
+    if (payment.status === PaymentStatus.FAILED) {
+      return { payment };
+    }
+    if (payment.status !== PaymentStatus.PENDING) {
+      throw new BadRequestException(`Payment status is ${payment.status}`);
+    }
+
+    const updated = await this.prisma.payment.update({
+      where: { id: payment.id },
+      data: { status: PaymentStatus.FAILED },
+    });
+
+    await this.audit.append({
+      action: AuditAction.PAYMENT_CREATE,
+      actorId: actor.realUserId,
+      meta: { paymentId: payment.id, failed: true },
+    });
+
+    return { payment: updated };
+  }
+
+  async mockCancel(actor: AuthUser, paymentId: string) {
+    const payment = await this.prisma.payment.findUnique({
+      where: { id: paymentId },
+    });
+    if (!payment) throw new NotFoundException('Payment not found');
+
+    const isOwner =
+      payment.userId === actor.id || payment.userId === actor.realUserId;
+    const isAdmin = actor.realGlobalRole === 'ADMIN';
+    if (!isOwner && !isAdmin) {
+      throw new ForbiddenException('Cannot cancel this payment');
+    }
+
+    if (payment.status === PaymentStatus.SUCCEEDED) {
+      throw new BadRequestException('Payment already succeeded');
+    }
+    if (
+      payment.status === PaymentStatus.CANCELED ||
+      payment.status === PaymentStatus.FAILED
+    ) {
+      return { payment };
+    }
+    if (payment.status !== PaymentStatus.PENDING) {
+      throw new BadRequestException(`Payment status is ${payment.status}`);
+    }
+
+    const updated = await this.prisma.payment.update({
+      where: { id: payment.id },
+      data: { status: PaymentStatus.CANCELED },
+    });
+
+    return { payment: updated };
   }
 }

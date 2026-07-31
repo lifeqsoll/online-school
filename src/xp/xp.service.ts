@@ -2,6 +2,7 @@ import { Injectable, ForbiddenException } from '@nestjs/common';
 import { SubmissionStatus, XpReason } from '@prisma/client';
 import { CryptoService } from '../common/crypto/crypto.service';
 import { CourseAccessService } from '../enrollments/course-access.service';
+import { NotificationsService } from '../notifications/notifications.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuthUser } from '../rbac/auth-user';
 
@@ -11,6 +12,7 @@ export class XpService {
     private readonly prisma: PrismaService,
     private readonly access: CourseAccessService,
     private readonly crypto: CryptoService,
+    private readonly notifications: NotificationsService,
   ) {}
 
   async syncBestAttempt(
@@ -19,11 +21,20 @@ export class XpService {
     assignmentId: string,
     submissionId: string,
   ): Promise<void> {
+    const previousTotal = await this.notifications.totalXpForUser(userId);
+
     const graded = await this.prisma.submission.findMany({
       where: {
         assignmentId,
         userId,
-        status: { in: [SubmissionStatus.AUTO_GRADED, SubmissionStatus.GRADED] },
+        status: {
+          in: [
+            SubmissionStatus.AUTO_GRADED,
+            SubmissionStatus.GRADED,
+            // Partial auto-score while OPEN/file awaits curator
+            SubmissionStatus.PENDING_REVIEW,
+          ],
+        },
         scoreXp: { not: null },
       },
       select: { id: true, scoreXp: true },
@@ -76,6 +87,19 @@ export class XpService {
         update: { totalXp: { increment: delta } },
       });
     });
+
+    const nextTotal = await this.notifications.totalXpForUser(userId);
+    if (nextTotal > previousTotal) {
+      try {
+        await this.notifications.maybeNotifyRankUp(
+          userId,
+          previousTotal,
+          nextTotal,
+        );
+      } catch {
+        /* non-blocking */
+      }
+    }
   }
 
   async getMyXp(user: AuthUser, courseId: string) {

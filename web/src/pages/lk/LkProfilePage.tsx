@@ -5,6 +5,7 @@ import {
   Form,
   Input,
   Space,
+  Switch,
   Typography,
   Upload,
   message,
@@ -245,6 +246,63 @@ export function LkProfilePage() {
             Сохранить профиль
           </Button>
         </Form>
+
+        {user.globalRole === 'ADMIN' ? (
+          <div
+            style={{
+              marginTop: 28,
+              paddingTop: 24,
+              borderTop: '1px solid #f0f0f0',
+            }}
+          >
+            <Typography.Title level={5} style={{ marginTop: 0 }}>
+              Уведомления
+            </Typography.Title>
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                gap: 16,
+              }}
+            >
+              <div>
+                <Typography.Text strong>
+                  Новые ДЗ на проверку
+                </Typography.Text>
+                <Typography.Paragraph
+                  type="secondary"
+                  style={{ margin: '4px 0 0', fontSize: 13 }}
+                >
+                  Всплывающее уведомление, когда ученик сдаёт работу на проверку
+                </Typography.Paragraph>
+              </div>
+              <Switch
+                checked={user.notifyHwSubmitted !== false}
+                onChange={async (checked) => {
+                  try {
+                    await api<AuthUser>('/users/me', {
+                      method: 'PATCH',
+                      json: { notifyHwSubmitted: checked },
+                    });
+                    await refreshMe();
+                    message.success(
+                      checked
+                        ? 'Уведомления о ДЗ включены'
+                        : 'Уведомления о ДЗ выключены',
+                    );
+                  } catch (e) {
+                    message.error(
+                      e instanceof ApiError || e instanceof Error
+                        ? e.message
+                        : 'Ошибка',
+                    );
+                  }
+                }}
+              />
+            </div>
+          </div>
+        ) : null}
 
         <div
           style={{

@@ -105,6 +105,8 @@ export function CourseCalendarTab({ courseId, modules }: Props) {
       }),
     onSuccess: (created) => {
       qc.invalidateQueries({ queryKey: ['course-events', courseId] });
+      qc.invalidateQueries({ queryKey: ['course', courseId] });
+      qc.invalidateQueries({ queryKey: ['me-calendar'] });
       message.success('Событие создано — можно добавить файлы');
       openEdit(created);
     },
@@ -120,6 +122,8 @@ export function CourseCalendarTab({ courseId, modules }: Props) {
     }) => api(`/events/${id}`, { method: 'PATCH', json: body }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['course-events', courseId] });
+      qc.invalidateQueries({ queryKey: ['course', courseId] });
+      qc.invalidateQueries({ queryKey: ['me-calendar'] });
       message.success('Сохранено');
       closeEditor();
     },
@@ -129,6 +133,8 @@ export function CourseCalendarTab({ courseId, modules }: Props) {
     mutationFn: (id: string) => api(`/events/${id}`, { method: 'DELETE' }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['course-events', courseId] });
+      qc.invalidateQueries({ queryKey: ['course', courseId] });
+      qc.invalidateQueries({ queryKey: ['me-calendar'] });
       message.success('Удалено');
       closeEditor();
     },
@@ -236,8 +242,27 @@ export function CourseCalendarTab({ courseId, modules }: Props) {
           <Form.Item name="meetingUrl" label="Ссылка на встречу">
             <Input placeholder="https://..." />
           </Form.Item>
-          <Form.Item name="lessonId" label="Урок">
-            <Select allowClear options={lessonOptions} />
+          <Form.Item
+            name="lessonId"
+            label="Урок"
+            extra="Привязка к уроку синхронизирует дату в панели редактирования урока"
+          >
+            <Select
+              allowClear
+              showSearch
+              optionFilterProp="label"
+              options={lessonOptions}
+              onChange={(lessonId) => {
+                if (!lessonId) return;
+                const opt = lessonOptions.find((o) => o.value === lessonId);
+                const title = form.getFieldValue('title');
+                if (opt && (!title || String(title).trim() === '')) {
+                  form.setFieldsValue({
+                    title: opt.label.split(' / ').slice(1).join(' / ') || opt.label,
+                  });
+                }
+              }}
+            />
           </Form.Item>
           <Form.Item name="assignmentId" label="Задание">
             <Select

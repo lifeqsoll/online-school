@@ -17,10 +17,10 @@ import { PaymentsService } from './payments.service';
         const mode = (config.get<string>('paymentProvider') ?? 'mock').toLowerCase();
         if (mode !== 'mock') {
           throw new Error(
-            `PAYMENT_PROVIDER=${mode} is not configured. Use mock in Catalog slice.`,
+            `PAYMENT_PROVIDER=${mode} is not configured. Use mock until a real provider is wired.`,
           );
         }
-        return new MockPaymentProvider();
+        return new MockPaymentProvider(config);
       },
     },
   ],
