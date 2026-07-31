@@ -10,4 +10,10 @@ export class DevMailSender implements MailSender {
       `[DEV MAIL] Password reset for ${email}. Token: ${token}`,
     );
   }
+
+  async sendEmailChangeCode(email: string, code: string): Promise<void> {
+    this.logger.log(
+      `[DEV MAIL] Email change code for ${email}. Code: ${code}`,
+    );
+  }
 }

@@ -6,6 +6,10 @@ export type AuthUser = {
   email?: string;
   firstName?: string | null;
   lastName?: string | null;
+  nickname?: string | null;
+  bio?: string | null;
+  avatarUrl?: string | null;
+  pendingEmail?: string | null;
   globalRole: 'ADMIN' | 'STUDENT';
   impersonation?: unknown;
 };

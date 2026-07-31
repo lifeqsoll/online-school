@@ -116,9 +116,49 @@ export function StaffShell({
             <Typography.Text type="secondary">Панель управления</Typography.Text>
           </Space>
           <Space>
-            <Typography.Text>
-              {user?.firstName || user?.email || user?.id}
-            </Typography.Text>
+            <button
+              type="button"
+              onClick={() => nav('/lk/profile')}
+              title="Профиль"
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 8,
+                border: 'none',
+                background: 'transparent',
+                cursor: 'pointer',
+                padding: 0,
+              }}
+            >
+              <span
+                style={{
+                  width: 28,
+                  height: 28,
+                  borderRadius: '50%',
+                  overflow: 'hidden',
+                  background: 'var(--accent)',
+                  color: '#fff',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  fontSize: 12,
+                  fontWeight: 700,
+                }}
+              >
+                {user?.avatarUrl ? (
+                  <img
+                    src={user.avatarUrl}
+                    alt=""
+                    style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                  />
+                ) : (
+                  (user?.nickname || user?.firstName || user?.email || '?')[0]?.toUpperCase()
+                )}
+              </span>
+              <Typography.Text>
+                {user?.nickname || user?.firstName || user?.email || user?.id}
+              </Typography.Text>
+            </button>
             <Button type="link" onClick={() => nav('/lk')}>
               Кабинет ученика
             </Button>

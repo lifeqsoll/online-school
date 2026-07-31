@@ -25,6 +25,7 @@ import { LkAssignmentPage } from './pages/lk/LkAssignmentPage';
 import { LkHomeworkPage } from './pages/lk/LkHomeworkPage';
 import { LkKnowledgePage } from './pages/lk/LkKnowledgePage';
 import { LkStatsPage } from './pages/lk/LkStatsPage';
+import { LkProfilePage } from './pages/lk/LkProfilePage';
 import {
   LkCourseSupportPage,
   LkTechSupportPage,
@@ -95,6 +96,7 @@ function AppRoutes() {
         <Route path="homework" element={<LkHomeworkPage />} />
         <Route path="knowledge" element={<LkKnowledgePage />} />
         <Route path="stats" element={<LkStatsPage />} />
+        <Route path="profile" element={<LkProfilePage />} />
         <Route path="support/course" element={<LkCourseSupportPage />} />
         <Route path="support/tech" element={<LkTechSupportPage />} />
       </Route>

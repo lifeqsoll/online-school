@@ -133,17 +133,22 @@ enum SupportThreadStatus {
 }
 
 model User {
-  id              String     @id @default(cuid())
-  emailEnc        String
-  emailHash       String     @unique
-  passwordHash    String
-  firstNameEnc    String?
-  lastNameEnc     String?
-  globalRole      GlobalRole @default(STUDENT)
-  emailVerifiedAt DateTime?
-  isActive        Boolean    @default(true)
-  createdAt       DateTime   @default(now())
-  updatedAt       DateTime   @updatedAt
+  id               String     @id @default(cuid())
+  emailEnc         String
+  emailHash        String     @unique
+  passwordHash     String
+  firstNameEnc     String?
+  lastNameEnc      String?
+  nickname         String?    @unique
+  bio              String?
+  avatarStorageKey String?
+  pendingEmailEnc  String?
+  pendingEmailHash String?
+  globalRole       GlobalRole @default(STUDENT)
+  emailVerifiedAt  DateTime?
+  isActive         Boolean    @default(true)
+  createdAt        DateTime   @default(now())
+  updatedAt        DateTime   @updatedAt
 
   memberships         CourseMembership[]
   enrollments         Enrollment[]

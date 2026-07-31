@@ -12,6 +12,7 @@ import { AuditService } from '../audit/audit.service';
 import { CryptoService } from '../common/crypto/crypto.service';
 import { MAIL_SENDER, MailSender } from '../mail/mail.sender';
 import { PrismaService } from '../prisma/prisma.service';
+import { StorageService } from '../storage/storage.service';
 import { LoginDto } from './dto/login.dto';
 import { RegisterDto } from './dto/register.dto';
 import { RefreshTokenService } from './refresh-token.service';
@@ -31,6 +32,7 @@ export class AuthService {
     private readonly refreshTokens: RefreshTokenService,
     private readonly audit: AuditService,
     private readonly config: ConfigService,
+    private readonly storage: StorageService,
     @Inject(MAIL_SENDER) private readonly mail: MailSender,
   ) {}
 
@@ -72,7 +74,7 @@ export class AuthService {
     });
 
     return {
-      user: this.toPublicUser(user),
+      user: await this.toPublicUser(user),
       ...tokens,
     };
   }
@@ -98,7 +100,7 @@ export class AuthService {
     });
 
     return {
-      user: this.toPublicUser(user),
+      user: await this.toPublicUser(user),
       ...tokens,
     };
   }
@@ -245,7 +247,15 @@ export class AuthService {
     return { accessToken, refreshToken };
   }
 
-  toPublicUser(user: User) {
+  async toPublicUser(user: User) {
+    let avatarUrl: string | null = null;
+    if (user.avatarStorageKey) {
+      try {
+        avatarUrl = await this.storage.getSignedGetUrl(user.avatarStorageKey);
+      } catch {
+        avatarUrl = null;
+      }
+    }
     return {
       id: user.id,
       email: this.crypto.decrypt(user.emailEnc),
@@ -253,6 +263,12 @@ export class AuthService {
         ? this.crypto.decrypt(user.firstNameEnc)
         : null,
       lastName: user.lastNameEnc ? this.crypto.decrypt(user.lastNameEnc) : null,
+      nickname: user.nickname ?? null,
+      bio: user.bio ?? null,
+      avatarUrl,
+      pendingEmail: user.pendingEmailEnc
+        ? this.crypto.decrypt(user.pendingEmailEnc)
+        : null,
       globalRole: user.globalRole,
       isActive: user.isActive,
       emailVerifiedAt: user.emailVerifiedAt,

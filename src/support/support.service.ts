@@ -199,6 +199,7 @@ export class SupportService {
     id: string;
     emailEnc: string;
     firstNameEnc: string | null;
+    nickname?: string | null;
     globalRole: GlobalRole;
   }) {
     let firstName: string | null = null;
@@ -218,6 +219,7 @@ export class SupportService {
     return {
       id: user.id,
       firstName,
+      nickname: user.nickname ?? null,
       email,
       globalRole: user.globalRole,
     };
@@ -238,6 +240,7 @@ export class SupportService {
         id: string;
         emailEnc: string;
         firstNameEnc: string | null;
+        nickname?: string | null;
         globalRole: GlobalRole;
       };
       messages?: Array<{
@@ -249,6 +252,7 @@ export class SupportService {
           id: string;
           emailEnc: string;
           firstNameEnc: string | null;
+          nickname?: string | null;
           globalRole: GlobalRole;
         };
       }>;

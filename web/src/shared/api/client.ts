@@ -54,6 +54,9 @@ function humanizeError(status: number, raw: string): string {
     if (lower.includes('invalid or expired reset')) {
       return 'Ссылка для сброса недействительна или устарела';
     }
+    if (lower.includes('invalid or expired code')) {
+      return 'Неверный или просроченный код';
+    }
     if (lower.includes('token')) return 'Сессия истекла — войдите снова';
     return raw || 'Нужна авторизация';
   }
@@ -69,8 +72,20 @@ function humanizeError(status: number, raw: string): string {
     }
     return raw || 'Не найдено';
   }
-  if (status === 409) return raw || 'Конфликт данных';
-  if (status === 400) return raw || 'Некорректные данные';
+  if (status === 409) {
+    if (lower.includes('nickname')) return 'Этот ник уже занят';
+    if (lower.includes('email')) return 'Этот email уже зарегистрирован';
+    return raw || 'Конфликт данных';
+  }
+  if (status === 400) {
+    if (lower.includes('already your email')) {
+      return 'Это уже ваш текущий email';
+    }
+    if (lower.includes('no email change pending')) {
+      return 'Смена email не запрошена';
+    }
+    return raw || 'Некорректные данные';
+  }
   if (status >= 500) return 'Ошибка сервера. Попробуйте позже';
   return raw || `Ошибка запроса (${status})`;
 }

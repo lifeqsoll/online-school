@@ -98,7 +98,12 @@ export class XpService {
       take: Math.min(Math.max(limit, 1), 100),
       include: {
         user: {
-          select: { id: true, firstNameEnc: true, lastNameEnc: true },
+          select: {
+            id: true,
+            firstNameEnc: true,
+            lastNameEnc: true,
+            nickname: true,
+          },
         },
       },
     });
@@ -106,13 +111,17 @@ export class XpService {
     return rows.map((r, i) => {
       let displayName = 'User';
       try {
-        const first = r.user.firstNameEnc
-          ? this.crypto.decrypt(r.user.firstNameEnc)
-          : '';
-        const last = r.user.lastNameEnc
-          ? this.crypto.decrypt(r.user.lastNameEnc)
-          : '';
-        displayName = `${first} ${last}`.trim() || 'User';
+        if (r.user.nickname?.trim()) {
+          displayName = r.user.nickname.trim();
+        } else {
+          const first = r.user.firstNameEnc
+            ? this.crypto.decrypt(r.user.firstNameEnc)
+            : '';
+          const last = r.user.lastNameEnc
+            ? this.crypto.decrypt(r.user.lastNameEnc)
+            : '';
+          displayName = `${first} ${last}`.trim() || 'User';
+        }
       } catch {
         displayName = 'User';
       }

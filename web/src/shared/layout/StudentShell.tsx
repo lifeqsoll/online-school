@@ -213,21 +213,36 @@ export function StudentShell() {
         >
           <Space size="middle" align="center">
             <XpRankWidget totalXp={totalXp} />
-            <div
+            <button
+              type="button"
+              title="Профиль"
+              onClick={() => nav('/lk/profile')}
               style={{
                 width: 36,
                 height: 36,
                 borderRadius: '50%',
-                background: 'var(--accent)',
+                border: 'none',
+                padding: 0,
+                background: user?.avatarUrl ? 'transparent' : 'var(--accent)',
                 color: '#fff',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
                 fontWeight: 700,
+                cursor: 'pointer',
+                overflow: 'hidden',
               }}
             >
-              {(user?.firstName || user?.email || 'Я')[0]?.toUpperCase()}
-            </div>
+              {user?.avatarUrl ? (
+                <img
+                  src={user.avatarUrl}
+                  alt=""
+                  style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                />
+              ) : (
+                (user?.nickname || user?.firstName || user?.email || 'Я')[0]?.toUpperCase()
+              )}
+            </button>
             {staffPath ? (
               <Button
                 type="primary"

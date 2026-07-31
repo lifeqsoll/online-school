@@ -30,6 +30,7 @@ export type SupportThread = {
   createdBy?: {
     id: string;
     firstName?: string | null;
+    nickname?: string | null;
     email?: string | null;
   };
   messages?: Array<{
@@ -39,6 +40,7 @@ export type SupportThread = {
     mine: boolean;
     sender?: {
       firstName?: string | null;
+      nickname?: string | null;
       email?: string | null;
       globalRole?: string;
     };
@@ -51,6 +53,7 @@ type Channel = 'COURSE' | 'TECH';
 function senderLabel(m: NonNullable<SupportThread['messages']>[number]) {
   if (m.mine) return 'Вы';
   if (m.sender?.globalRole === 'ADMIN') return 'Админ';
+  if (m.sender?.nickname) return m.sender.nickname;
   if (m.sender?.firstName) return m.sender.firstName;
   if (m.sender?.email) return m.sender.email;
   return 'Сотрудник';
@@ -149,22 +152,22 @@ export function SupportPanel({
   );
 
   return (
-    <div style={{ maxWidth: 960 }}>
+    <div style={{ width: '100%', maxWidth: 1400 }}>
       <div
         style={{
           display: 'flex',
           justifyContent: 'space-between',
           alignItems: 'center',
-          marginBottom: 16,
+          marginBottom: 20,
           gap: 12,
           flexWrap: 'wrap',
         }}
       >
-        <Typography.Title level={3} style={{ margin: 0 }}>
+        <Typography.Title level={3} style={{ margin: 0, fontSize: 28 }}>
           {title}
         </Typography.Title>
         {allowCreate ? (
-          <Button type="primary" onClick={() => setCreateOpen(true)}>
+          <Button type="primary" size="large" onClick={() => setCreateOpen(true)}>
             Новое обращение
           </Button>
         ) : null}
@@ -173,31 +176,38 @@ export function SupportPanel({
       <div
         style={{
           display: 'grid',
-          gridTemplateColumns: activeId ? 'minmax(240px, 320px) 1fr' : '1fr',
-          gap: 16,
+          gridTemplateColumns: activeId
+            ? 'minmax(300px, 400px) minmax(0, 1fr)'
+            : '1fr',
+          gap: 20,
+          minHeight: 'min(72vh, 820px)',
         }}
       >
         <div
           style={{
             background: '#fff',
             border: '1px solid #ebebeb',
-            borderRadius: 14,
+            borderRadius: 16,
             overflow: 'hidden',
+            display: 'flex',
+            flexDirection: 'column',
+            minHeight: 'min(72vh, 820px)',
           }}
         >
           {(list.data ?? []).length === 0 ? (
-            <div style={{ padding: 24 }}>
+            <div style={{ padding: 32 }}>
               <Empty description="Пока нет обращений" />
             </div>
           ) : (
             <List
+              style={{ flex: 1, overflowY: 'auto' }}
               dataSource={list.data}
               renderItem={(t) => (
                 <List.Item
                   onClick={() => setActiveId(t.id)}
                   style={{
                     cursor: 'pointer',
-                    padding: '12px 16px',
+                    padding: '16px 20px',
                     background:
                       activeId === t.id ? 'rgba(190,170,242,0.18)' : undefined,
                   }}
@@ -205,14 +215,16 @@ export function SupportPanel({
                   <List.Item.Meta
                     title={
                       <Space size={8} wrap>
-                        <span>{t.subject}</span>
+                        <span style={{ fontSize: 16, fontWeight: 600 }}>
+                          {t.subject}
+                        </span>
                         <Tag color={t.status === 'OPEN' ? 'green' : 'default'}>
                           {t.status === 'OPEN' ? 'Открыт' : 'Закрыт'}
                         </Tag>
                       </Space>
                     }
                     description={
-                      <span>
+                      <span style={{ fontSize: 14 }}>
                         {t.course?.title ? `${t.course.title} · ` : ''}
                         {dayjs(t.lastMessageAt).format('DD.MM HH:mm')}
                         {t.preview ? ` — ${t.preview}` : ''}
@@ -230,9 +242,9 @@ export function SupportPanel({
             style={{
               background: '#fff',
               border: '1px solid #ebebeb',
-              borderRadius: 14,
-              padding: 16,
-              minHeight: 360,
+              borderRadius: 16,
+              padding: 24,
+              minHeight: 'min(72vh, 820px)',
               display: 'flex',
               flexDirection: 'column',
             }}
@@ -245,19 +257,25 @@ export function SupportPanel({
                   style={{
                     display: 'flex',
                     justifyContent: 'space-between',
-                    gap: 8,
-                    marginBottom: 12,
+                    gap: 12,
+                    marginBottom: 16,
+                    paddingBottom: 14,
+                    borderBottom: '1px solid #f0f0f0',
                   }}
                 >
                   <div>
-                    <Typography.Title level={5} style={{ margin: 0 }}>
+                    <Typography.Title
+                      level={4}
+                      style={{ margin: 0, fontSize: 22 }}
+                    >
                       {thread.data.subject}
                     </Typography.Title>
-                    <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+                    <Typography.Text type="secondary" style={{ fontSize: 14 }}>
                       {thread.data.course?.title
                         ? `${thread.data.course.title} · `
                         : ''}
-                      {thread.data.createdBy?.firstName ||
+                      {thread.data.createdBy?.nickname ||
+                        thread.data.createdBy?.firstName ||
                         thread.data.createdBy?.email ||
                         (thread.data.isMine ? user?.email : '')}
                     </Typography.Text>
@@ -265,16 +283,13 @@ export function SupportPanel({
                   <Space>
                     {thread.data.status === 'OPEN' ? (
                       <Button
-                        size="small"
                         onClick={() => close.mutate()}
                         loading={close.isPending}
                       >
                         Закрыть
                       </Button>
                     ) : null}
-                    <Button size="small" onClick={() => setActiveId(null)}>
-                      Свернуть
-                    </Button>
+                    <Button onClick={() => setActiveId(null)}>Свернуть</Button>
                   </Space>
                 </div>
 
@@ -284,9 +299,10 @@ export function SupportPanel({
                     overflowY: 'auto',
                     display: 'flex',
                     flexDirection: 'column',
-                    gap: 10,
-                    marginBottom: 12,
-                    maxHeight: 420,
+                    gap: 14,
+                    marginBottom: 16,
+                    paddingInline: 4,
+                    minHeight: 360,
                   }}
                 >
                   {(thread.data.messages ?? []).map((m) => (
@@ -294,22 +310,24 @@ export function SupportPanel({
                       key={m.id}
                       style={{
                         alignSelf: m.mine ? 'flex-end' : 'flex-start',
-                        maxWidth: '85%',
+                        maxWidth: 'min(720px, 78%)',
                         background: m.mine
                           ? 'rgba(190,170,242,0.25)'
                           : '#f5f5f5',
-                        borderRadius: 12,
-                        padding: '8px 12px',
+                        borderRadius: 16,
+                        padding: '12px 16px',
                       }}
                     >
                       <Typography.Text
                         type="secondary"
-                        style={{ fontSize: 11, display: 'block' }}
+                        style={{ fontSize: 13, display: 'block', marginBottom: 4 }}
                       >
                         {senderLabel(m)} ·{' '}
                         {dayjs(m.createdAt).format('DD.MM HH:mm')}
                       </Typography.Text>
-                      <Typography.Text style={{ whiteSpace: 'pre-wrap' }}>
+                      <Typography.Text
+                        style={{ whiteSpace: 'pre-wrap', fontSize: 16, lineHeight: 1.5 }}
+                      >
                         {m.body}
                       </Typography.Text>
                     </div>
@@ -317,11 +335,18 @@ export function SupportPanel({
                 </div>
 
                 {thread.data.status === 'OPEN' ? (
-                  <Space.Compact style={{ width: '100%' }}>
+                  <div
+                    style={{
+                      display: 'flex',
+                      alignItems: 'stretch',
+                      gap: 10,
+                    }}
+                  >
                     <Input.TextArea
                       value={reply}
                       onChange={(e) => setReply(e.target.value)}
-                      autoSize={{ minRows: 1, maxRows: 4 }}
+                      autoSize={{ minRows: 2, maxRows: 6 }}
+                      style={{ fontSize: 16, flex: 1 }}
                       placeholder="Ответ… (Enter — отправить, Shift+Enter — новая строка)"
                       onKeyDown={async (e) => {
                         if (e.key !== 'Enter' || e.shiftKey) return;
@@ -341,6 +366,12 @@ export function SupportPanel({
                     <Button
                       type="primary"
                       loading={send.isPending}
+                      style={{
+                        height: 'auto',
+                        alignSelf: 'stretch',
+                        paddingInline: 22,
+                        flexShrink: 0,
+                      }}
                       onClick={async () => {
                         if (!reply.trim()) return;
                         try {
@@ -356,9 +387,9 @@ export function SupportPanel({
                     >
                       Отправить
                     </Button>
-                  </Space.Compact>
+                  </div>
                 ) : (
-                  <Typography.Text type="secondary">
+                  <Typography.Text type="secondary" style={{ fontSize: 15 }}>
                     Диалог закрыт
                   </Typography.Text>
                 )}
