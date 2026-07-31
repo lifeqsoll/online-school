@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { Typography } from 'antd';
-import { StarFilled } from '@ant-design/icons';
+import { CustomerServiceOutlined, StarFilled } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import { Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
@@ -43,6 +43,49 @@ export function LkHomePage() {
         <WeekStripCalendar events={Array.isArray(cal.data) ? cal.data : []} />
       </motion.div>
 
+      <Link to="/lk/support/course" style={{ textDecoration: 'none', color: 'inherit' }}>
+        <motion.div
+          whileHover={{ y: -2, boxShadow: '0 10px 24px rgba(107, 79, 184, 0.12)' }}
+          transition={{ duration: 0.22 }}
+          style={{
+            marginTop: 20,
+            background:
+              'linear-gradient(120deg, rgba(190,170,242,0.22), rgba(148,200,255,0.18))',
+            border: '1px solid rgba(190,170,242,0.35)',
+            borderRadius: 14,
+            padding: '16px 18px',
+            display: 'flex',
+            alignItems: 'center',
+            gap: 14,
+          }}
+        >
+          <div
+            style={{
+              width: 40,
+              height: 40,
+              borderRadius: 12,
+              background: '#fff',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              color: '#6b4fb8',
+              fontSize: 18,
+              flexShrink: 0,
+            }}
+          >
+            <CustomerServiceOutlined />
+          </div>
+          <div>
+            <Typography.Text strong style={{ display: 'block' }}>
+              Поддержка курса
+            </Typography.Text>
+            <Typography.Text type="secondary" style={{ fontSize: 13 }}>
+              Вопрос куратору по материалам, ДЗ или занятиям
+            </Typography.Text>
+          </div>
+        </motion.div>
+      </Link>
+
       <div
         style={{
           display: 'flex',
@@ -74,7 +117,10 @@ export function LkHomePage() {
               style={{ textDecoration: 'none', color: 'inherit' }}
             >
               <motion.div
-                whileHover={{ y: -4, boxShadow: '0 10px 24px rgba(107, 79, 184, 0.12)' }}
+                whileHover={{
+                  y: -4,
+                  boxShadow: '0 10px 24px rgba(107, 79, 184, 0.12)',
+                }}
                 transition={{ duration: 0.22 }}
                 style={{
                   background: '#fff',
@@ -83,7 +129,9 @@ export function LkHomePage() {
                   padding: 16,
                 }}
               >
-                <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
+                <div
+                  style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}
+                >
                   <Typography.Text strong style={{ fontSize: 14 }}>
                     {e.course.title}
                   </Typography.Text>
@@ -96,7 +144,8 @@ export function LkHomePage() {
                   ellipsis={{ rows: 2 }}
                   style={{ marginTop: 10, marginBottom: 0, fontSize: 13 }}
                 >
-                  {e.course.description || 'Открыть курс · уроки и домашние задания'}
+                  {e.course.description ||
+                    'Открыть курс · уроки и домашние задания'}
                 </Typography.Paragraph>
               </motion.div>
             </Link>

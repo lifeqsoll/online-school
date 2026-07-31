@@ -201,6 +201,23 @@ export class CoursesService {
     });
   }
 
+  async removeCurator(actor: AuthUser, courseId: string, userId: string) {
+    if (actor.realGlobalRole !== 'ADMIN') {
+      throw new ForbiddenException('Only admin can remove curators');
+    }
+    await this.get(courseId);
+    const membership = await this.prisma.courseMembership.findUnique({
+      where: { courseId_userId: { courseId, userId } },
+    });
+    if (!membership || membership.role !== MembershipRole.CURATOR) {
+      throw new NotFoundException('Curator membership not found');
+    }
+    await this.prisma.courseMembership.delete({
+      where: { courseId_userId: { courseId, userId } },
+    });
+    return { ok: true };
+  }
+
   async requireManage(actor: AuthUser, courseId: string) {
     const ok = await this.access.canManageCourse(actor, courseId);
     if (!ok) throw new ForbiddenException('Cannot manage this course');

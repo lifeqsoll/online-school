@@ -90,6 +90,7 @@ enum StoredFileOwnerType {
   LESSON_MATERIAL
   ASSIGNMENT_MATERIAL
   SUBMISSION_ATTACHMENT
+  COURSE_EVENT_MATERIAL
 }
 
 enum AssignmentResponseMode {
@@ -121,6 +122,16 @@ enum XpReason {
   BEST_ATTEMPT
 }
 
+enum SupportChannel {
+  COURSE
+  TECH
+}
+
+enum SupportThreadStatus {
+  OPEN
+  CLOSED
+}
+
 model User {
   id              String     @id @default(cuid())
   emailEnc        String
@@ -150,6 +161,8 @@ model User {
   topicMasteries      TopicMastery[]
   courseEvents        CourseEvent[]
   uploadedFiles       StoredFile[]
+  supportThreads      SupportThread[]  @relation("SupportThreadAuthor")
+  supportMessages     SupportMessage[]
 }
 
 model EmailVerificationCode {
@@ -198,6 +211,7 @@ model Course {
   topics      Topic[]
   events      CourseEvent[]
   storedFiles StoredFile[]
+  supportThreads SupportThread[]
 }
 
 model CourseModule {
@@ -585,4 +599,37 @@ model CourseEvent {
 
   @@index([courseId, startsAt])
   @@index([startsAt])
+}
+
+model SupportThread {
+  id            String              @id @default(cuid())
+  channel       SupportChannel
+  courseId      String?
+  createdById   String
+  subject       String
+  status        SupportThreadStatus @default(OPEN)
+  lastMessageAt DateTime            @default(now())
+  createdAt     DateTime            @default(now())
+  updatedAt     DateTime            @updatedAt
+
+  course    Course?          @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  createdBy User             @relation("SupportThreadAuthor", fields: [createdById], references: [id], onDelete: Cascade)
+  messages  SupportMessage[]
+
+  @@index([createdById, lastMessageAt])
+  @@index([channel, status, lastMessageAt])
+  @@index([courseId, lastMessageAt])
+}
+
+model SupportMessage {
+  id        String   @id @default(cuid())
+  threadId  String
+  senderId  String
+  body      String
+  createdAt DateTime @default(now())
+
+  thread SupportThread @relation(fields: [threadId], references: [id], onDelete: Cascade)
+  sender User          @relation(fields: [senderId], references: [id], onDelete: Cascade)
+
+  @@index([threadId, createdAt])
 }

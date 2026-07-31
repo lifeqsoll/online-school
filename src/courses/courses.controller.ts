@@ -78,4 +78,13 @@ export class CoursesController {
   ) {
     return this.courses.assignCurator(user, id, dto.userId);
   }
+
+  @Delete(':id/curators/:userId')
+  removeCurator(
+    @CurrentUser() user: AuthUser,
+    @Param('id') id: string,
+    @Param('userId') userId: string,
+  ) {
+    return this.courses.removeCurator(user, id, userId);
+  }
 }

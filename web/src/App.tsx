@@ -4,6 +4,8 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
 import { AuthProvider, useAuth } from './shared/auth/AuthContext';
 import { LoginPage } from './pages/LoginPage';
+import { ForgotPasswordPage } from './pages/ForgotPasswordPage';
+import { ResetPasswordPage } from './pages/ResetPasswordPage';
 import { StaffShell, adminMenu, curatorMenu } from './shared/layout/StaffShell';
 import { PublicShell } from './shared/layout/PublicShell';
 import { StudentShell } from './shared/layout/StudentShell';
@@ -23,6 +25,11 @@ import { LkAssignmentPage } from './pages/lk/LkAssignmentPage';
 import { LkHomeworkPage } from './pages/lk/LkHomeworkPage';
 import { LkKnowledgePage } from './pages/lk/LkKnowledgePage';
 import { LkStatsPage } from './pages/lk/LkStatsPage';
+import {
+  LkCourseSupportPage,
+  LkTechSupportPage,
+  StaffSupportInboxPage,
+} from './pages/lk/LkSupportPages';
 import type { ReactNode } from 'react';
 
 const qc = new QueryClient();
@@ -69,6 +76,8 @@ function AppRoutes() {
       </Route>
 
       <Route path="/login" element={<LoginPage />} />
+      <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+      <Route path="/reset-password" element={<ResetPasswordPage />} />
 
       <Route
         path="/lk"
@@ -86,6 +95,8 @@ function AppRoutes() {
         <Route path="homework" element={<LkHomeworkPage />} />
         <Route path="knowledge" element={<LkKnowledgePage />} />
         <Route path="stats" element={<LkStatsPage />} />
+        <Route path="support/course" element={<LkCourseSupportPage />} />
+        <Route path="support/tech" element={<LkTechSupportPage />} />
       </Route>
 
       <Route
@@ -127,6 +138,12 @@ function AppRoutes() {
           }
         />
         <Route path="users" element={<UsersPage />} />
+        <Route
+          path="support"
+          element={
+            <StaffSupportInboxPage channel="TECH" title="Техподдержка" />
+          }
+        />
       </Route>
 
       <Route
@@ -191,6 +208,15 @@ function AppRoutes() {
               tab="xp"
               title="XP / лидерборд"
               managedOnly
+            />
+          }
+        />
+        <Route
+          path="support"
+          element={
+            <StaffSupportInboxPage
+              channel="COURSE"
+              title="Поддержка курса"
             />
           }
         />

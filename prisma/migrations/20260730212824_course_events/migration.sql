@@ -32,8 +32,7 @@ ALTER TABLE "CourseEvent" ADD CONSTRAINT "CourseEvent_courseId_fkey" FOREIGN KEY
 -- AddForeignKey
 ALTER TABLE "CourseEvent" ADD CONSTRAINT "CourseEvent_lessonId_fkey" FOREIGN KEY ("lessonId") REFERENCES "Lesson"("id") ON DELETE SET NULL ON UPDATE CASCADE;
 
--- AddForeignKey
-ALTER TABLE "CourseEvent" ADD CONSTRAINT "CourseEvent_assignmentId_fkey" FOREIGN KEY ("assignmentId") REFERENCES "Assignment"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+-- Assignment FK is added in 20260730220000_homework_init (Assignment table is created there).
 
 -- AddForeignKey
 ALTER TABLE "CourseEvent" ADD CONSTRAINT "CourseEvent_createdById_fkey" FOREIGN KEY ("createdById") REFERENCES "User"("id") ON DELETE RESTRICT ON UPDATE CASCADE;

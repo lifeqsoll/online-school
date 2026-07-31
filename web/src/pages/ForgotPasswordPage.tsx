@@ -1,14 +1,18 @@
 import { Button, Form, Input, Typography, message } from 'antd';
 import { Link, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { useAuth } from '../shared/auth/AuthContext';
+import { useState } from 'react';
 import { api, ApiError } from '../shared/api/client';
-import { resolvePostLoginPath } from '../shared/auth/postLoginPath';
 import { easeOutExpo } from '../shared/motion';
 
-export function LoginPage() {
-  const { login } = useAuth();
+type ForgotResult = {
+  message: string;
+  resetToken?: string;
+};
+
+export function ForgotPasswordPage() {
   const nav = useNavigate();
+  const [devToken, setDevToken] = useState<string | null>(null);
 
   return (
     <div
@@ -52,10 +56,10 @@ export function LoginPage() {
             ОЛИМПИАДНАЯ ШКОЛА
           </Typography.Text>
           <Typography.Title level={2} style={{ margin: '0 0 6px', fontSize: 28 }}>
-            Вход
+            Сброс пароля
           </Typography.Title>
           <Typography.Paragraph type="secondary" style={{ marginBottom: 28 }}>
-            Ученики, кураторы и администраторы
+            Укажите email — если аккаунт есть, отправим инструкцию
           </Typography.Paragraph>
 
           <Form
@@ -63,24 +67,25 @@ export function LoginPage() {
             requiredMark={false}
             onFinish={async (v) => {
               try {
-                const user = await login(v.email, v.password);
-                const path = await resolvePostLoginPath(user, api);
+                const res = await api<ForgotResult>('/auth/forgot-password', {
+                  method: 'POST',
+                  json: { email: v.email },
+                  auth: false,
+                });
                 message.success(
-                  path === '/admin'
-                    ? 'Вход выполнен: администратор'
-                    : path === '/curator'
-                      ? 'Вход выполнен: куратор'
-                      : 'Вход выполнен',
+                  'Если такой email есть в системе, инструкция отправлена',
                 );
-                nav(path);
-              } catch (e) {
-                if (e instanceof ApiError) {
-                  message.error(e.message);
-                } else if (e instanceof Error) {
-                  message.error(e.message);
-                } else {
-                  message.error('Не удалось войти');
+                if (res.resetToken) {
+                  setDevToken(res.resetToken);
                 }
+              } catch (e) {
+                message.error(
+                  e instanceof ApiError
+                    ? e.message
+                    : e instanceof Error
+                      ? e.message
+                      : 'Не удалось отправить запрос',
+                );
               }
             }}
           >
@@ -94,41 +99,42 @@ export function LoginPage() {
             >
               <Input size="large" type="email" placeholder="you@example.com" autoComplete="email" />
             </Form.Item>
-            <Form.Item
-              name="password"
-              label="Пароль"
-              rules={[{ required: true, message: 'Введите пароль' }]}
-              style={{ marginBottom: 8 }}
-            >
-              <Input.Password
-                size="large"
-                placeholder="Ваш пароль"
-                autoComplete="current-password"
-              />
-            </Form.Item>
-            <div style={{ textAlign: 'right', marginBottom: 20 }}>
-              <Link
-                to="/forgot-password"
-                style={{ fontSize: 13, color: '#6b4fb8', fontWeight: 500 }}
-              >
-                Забыли пароль?
-              </Link>
-            </div>
             <Button type="primary" htmlType="submit" block size="large">
-              Войти
+              Отправить
             </Button>
           </Form>
+
+          {devToken ? (
+            <div
+              style={{
+                marginTop: 20,
+                padding: 14,
+                borderRadius: 12,
+                background: 'rgba(190,170,242,0.12)',
+                border: '1px solid rgba(190,170,242,0.35)',
+              }}
+            >
+              <Typography.Text style={{ fontSize: 12, display: 'block', marginBottom: 8 }}>
+                Dev-режим: токен сброса (в проде его не будет)
+              </Typography.Text>
+              <Button
+                type="link"
+                style={{ padding: 0, height: 'auto' }}
+                onClick={() =>
+                  nav(`/reset-password?token=${encodeURIComponent(devToken)}`)
+                }
+              >
+                Перейти к установке нового пароля →
+              </Button>
+            </div>
+          ) : null}
 
           <Typography.Paragraph
             type="secondary"
             style={{ marginTop: 24, marginBottom: 0, textAlign: 'center', fontSize: 13 }}
           >
-            <Link to="/" style={{ color: 'inherit' }}>
-              На главную
-            </Link>
-            <span style={{ margin: '0 8px', opacity: 0.4 }}>·</span>
-            <Link to="/catalog" style={{ color: 'inherit' }}>
-              Каталог
+            <Link to="/login" style={{ color: '#6b4fb8', fontWeight: 500 }}>
+              Вернуться ко входу
             </Link>
           </Typography.Paragraph>
         </div>

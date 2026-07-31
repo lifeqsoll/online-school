@@ -107,6 +107,9 @@ export class CourseEventsService {
     if (!(await this.access.canManageCourse(actor, event.courseId))) {
       throw new ForbiddenException('Cannot manage this course');
     }
+    await this.prisma.storedFile.deleteMany({
+      where: { ownerType: 'COURSE_EVENT_MATERIAL', ownerId: id },
+    });
     await this.prisma.courseEvent.delete({ where: { id } });
     return { ok: true };
   }

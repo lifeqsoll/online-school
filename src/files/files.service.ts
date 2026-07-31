@@ -12,7 +12,7 @@ import { CourseAccessService } from '../enrollments/course-access.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuthUser } from '../rbac/auth-user';
 import { StorageService } from '../storage/storage.service';
-import { assertPngOrPdf } from './files.mime';
+import { assertEventMaterial, assertPngOrPdf, decodeUploadFilename } from './files.mime';
 
 type OwnerContext = {
   courseId: string;
@@ -38,7 +38,11 @@ export class FilesService {
   ) {
     if (!file) throw new BadRequestException('file is required');
     try {
-      assertPngOrPdf(file.mimetype || '', file.size);
+      if (ownerType === StoredFileOwnerType.COURSE_EVENT_MATERIAL) {
+        assertEventMaterial(file.mimetype || '', file.size);
+      } else {
+        assertPngOrPdf(file.mimetype || '', file.size);
+      }
     } catch (e) {
       throw new BadRequestException((e as Error).message);
     }
@@ -46,11 +50,13 @@ export class FilesService {
     const ctx = await this.resolveOwner(ownerType, ownerId);
     await this.assertCanUpload(actor, ctx);
 
+    const originalName = decodeUploadFilename(file.originalname || 'file');
+
     const key = this.storage.buildFileKey(
       ctx.courseId,
       ownerType,
       ownerId,
-      file.originalname || 'file',
+      originalName,
     );
     await this.storage.uploadObject(
       key,
@@ -64,7 +70,7 @@ export class FilesService {
         ownerId,
         courseId: ctx.courseId,
         uploadedById: actor.id,
-        originalName: file.originalname || 'file',
+        originalName,
         mimeType: file.mimetype,
         sizeBytes: file.size,
         storageKey: key,
@@ -170,13 +176,26 @@ export class FilesService {
       };
     }
 
+    if (ownerType === StoredFileOwnerType.COURSE_EVENT_MATERIAL) {
+      const event = await this.prisma.courseEvent.findUnique({
+        where: { id: ownerId },
+      });
+      if (!event) throw new NotFoundException('Event not found');
+      return {
+        courseId: event.courseId,
+        ownerType,
+        ownerId,
+      };
+    }
+
     throw new BadRequestException('Invalid ownerType');
   }
 
   private async assertCanUpload(actor: AuthUser, ctx: OwnerContext) {
     if (
       ctx.ownerType === StoredFileOwnerType.LESSON_MATERIAL ||
-      ctx.ownerType === StoredFileOwnerType.ASSIGNMENT_MATERIAL
+      ctx.ownerType === StoredFileOwnerType.ASSIGNMENT_MATERIAL ||
+      ctx.ownerType === StoredFileOwnerType.COURSE_EVENT_MATERIAL
     ) {
       if (!(await this.access.canManageCourse(actor, ctx.courseId))) {
         throw new ForbiddenException('Cannot manage this course');
@@ -198,7 +217,8 @@ export class FilesService {
   private async assertCanRead(actor: AuthUser, ctx: OwnerContext) {
     if (
       ctx.ownerType === StoredFileOwnerType.LESSON_MATERIAL ||
-      ctx.ownerType === StoredFileOwnerType.ASSIGNMENT_MATERIAL
+      ctx.ownerType === StoredFileOwnerType.ASSIGNMENT_MATERIAL ||
+      ctx.ownerType === StoredFileOwnerType.COURSE_EVENT_MATERIAL
     ) {
       if (!(await this.access.hasContentAccess(actor, ctx.courseId))) {
         throw new ForbiddenException('No access');
@@ -220,7 +240,8 @@ export class FilesService {
   ) {
     if (
       ctx.ownerType === StoredFileOwnerType.LESSON_MATERIAL ||
-      ctx.ownerType === StoredFileOwnerType.ASSIGNMENT_MATERIAL
+      ctx.ownerType === StoredFileOwnerType.ASSIGNMENT_MATERIAL ||
+      ctx.ownerType === StoredFileOwnerType.COURSE_EVENT_MATERIAL
     ) {
       if (!(await this.access.canManageCourse(actor, ctx.courseId))) {
         throw new ForbiddenException('Cannot manage this course');

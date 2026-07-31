@@ -1,12 +1,12 @@
-import { Button, Space, Typography } from 'antd';
+import { Button, Space } from 'antd';
 import {
   HomeOutlined,
   CalendarOutlined,
   FormOutlined,
   LogoutOutlined,
-  ReadOutlined,
   BookOutlined,
   BarChartOutlined,
+  CustomerServiceOutlined,
 } from '@ant-design/icons';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
@@ -16,6 +16,7 @@ import { useAuth } from '../auth/AuthContext';
 import { api } from '../api/client';
 import { AnimatedOutlet } from './AnimatedOutlet';
 import { easeOutExpo } from '../motion';
+import { XpRankWidget } from '../xp/XpRankWidget';
 
 const COLLAPSED = 72;
 const EXPANDED = 200;
@@ -57,13 +58,24 @@ export function StudentShell() {
     { key: '/lk/homework', icon: <FormOutlined />, title: 'Домашки' },
     { key: '/lk/knowledge', icon: <BookOutlined />, title: 'База знаний' },
     { key: '/lk/stats', icon: <BarChartOutlined />, title: 'Статистика' },
+    {
+      key: '/lk/support/tech',
+      icon: <CustomerServiceOutlined />,
+      title: 'Техподдержка',
+    },
   ];
 
-  const selected =
-    [...items]
-      .sort((a, b) => b.key.length - a.key.length)
-      .find((i) => loc.pathname === i.key || loc.pathname.startsWith(i.key + '/'))
-      ?.key ?? '/lk';
+  // Assignment detail lives under /lk/assignments/:id but belongs to Homework nav
+  const selected = loc.pathname.startsWith('/lk/assignments')
+    ? '/lk/homework'
+    : ([...items]
+        .sort((a, b) => b.key.length - a.key.length)
+        .find((i) => {
+          if (i.key === '/lk') return loc.pathname === '/lk';
+          return (
+            loc.pathname === i.key || loc.pathname.startsWith(i.key + '/')
+          );
+        })?.key ?? '/lk');
 
   const staffPath =
     user?.globalRole === 'ADMIN'
@@ -73,8 +85,6 @@ export function StudentShell() {
         : null;
 
   const totalXp = xp.data ?? 0;
-  const barMax = Math.max(100, Math.ceil((totalXp + 1) / 100) * 100);
-  const percent = Math.min(100, Math.round((totalXp / barMax) * 100));
 
   return (
     <div
@@ -202,78 +212,7 @@ export function StudentShell() {
           }}
         >
           <Space size="middle" align="center">
-            <div
-              title={`Опыт: ${totalXp} / ${barMax} XP`}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: 10,
-                background: '#fff',
-                border: '1px solid #ebebeb',
-                borderRadius: 999,
-                padding: '6px 12px 6px 10px',
-                minWidth: 148,
-              }}
-            >
-              <div
-                style={{
-                  width: 28,
-                  height: 28,
-                  borderRadius: 999,
-                  background: 'rgba(250, 173, 20, 0.14)',
-                  color: '#d48806',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  flexShrink: 0,
-                }}
-              >
-                <ReadOutlined />
-              </div>
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div
-                  style={{
-                    display: 'flex',
-                    alignItems: 'baseline',
-                    justifyContent: 'space-between',
-                    gap: 8,
-                    lineHeight: 1.1,
-                  }}
-                >
-                  <Typography.Text strong style={{ fontSize: 14 }}>
-                    {totalXp}
-                    <Typography.Text
-                      type="secondary"
-                      style={{ fontSize: 11, fontWeight: 500, marginLeft: 4 }}
-                    >
-                      XP
-                    </Typography.Text>
-                  </Typography.Text>
-                  <Typography.Text type="secondary" style={{ fontSize: 11 }}>
-                    {totalXp}/{barMax}
-                  </Typography.Text>
-                </div>
-                <div
-                  style={{
-                    marginTop: 4,
-                    height: 4,
-                    borderRadius: 999,
-                    background: '#f0f0f0',
-                    overflow: 'hidden',
-                  }}
-                >
-                  <div
-                    style={{
-                      width: `${percent}%`,
-                      height: '100%',
-                      borderRadius: 999,
-                      background: 'linear-gradient(90deg, #95de64, #52c41a)',
-                      transition: 'width 0.35s ease',
-                    }}
-                  />
-                </div>
-              </div>
-            </div>
+            <XpRankWidget totalXp={totalXp} />
             <div
               style={{
                 width: 36,

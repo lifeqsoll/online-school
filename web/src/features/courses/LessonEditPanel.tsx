@@ -130,6 +130,7 @@ export function LessonEditPanel({
                   throw new Error(t || res.statusText);
                 }
                 message.success('Видео загружено');
+                qc.invalidateQueries({ queryKey: ['course'] });
                 onSuccess?.(await res.json());
               } catch (e) {
                 message.error(e instanceof Error ? e.message : 'Ошибка');
@@ -140,11 +141,33 @@ export function LessonEditPanel({
           >
             <Button>Выбрать видео</Button>
           </Upload>
-          {lesson.videoSource ? (
+          {lesson.videoSource || lesson.videoUrl ? (
+            <div
+              style={{
+                marginTop: 8,
+                padding: 10,
+                borderRadius: 10,
+                background: 'rgba(190,170,242,0.1)',
+                border: '1px solid rgba(190,170,242,0.3)',
+              }}
+            >
+              <Typography.Text>
+                Видео прикреплено
+                {lesson.videoSource ? ` · ${lesson.videoSource}` : ''}
+              </Typography.Text>
+              {lesson.videoUrl ? (
+                <div style={{ marginTop: 6 }}>
+                  <a href={lesson.videoUrl} target="_blank" rel="noreferrer">
+                    Открыть видео
+                  </a>
+                </div>
+              ) : null}
+            </div>
+          ) : (
             <Typography.Text type="secondary" style={{ display: 'block', marginTop: 8 }}>
-              Источник: {lesson.videoSource}
+              Видео ещё не загружено
             </Typography.Text>
-          ) : null}
+          )}
         </Form.Item>
 
         <Typography.Title level={5}>Материалы (PNG/PDF)</Typography.Title>

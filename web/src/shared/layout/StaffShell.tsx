@@ -10,6 +10,7 @@ import {
   LogoutOutlined,
   MenuFoldOutlined,
   MenuUnfoldOutlined,
+  CustomerServiceOutlined,
 } from '@ant-design/icons';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../shared/auth/AuthContext';
@@ -157,6 +158,11 @@ export const adminMenu = (base: '/admin'): Item[] => [
   { key: `${base}/students`, icon: <TeamOutlined />, label: 'Ученики' },
   { key: `${base}/analytics`, icon: <BarChartOutlined />, label: 'Аналитика' },
   { key: `${base}/xp`, icon: <TrophyOutlined />, label: 'XP / лидерборд' },
+  {
+    key: `${base}/support`,
+    icon: <CustomerServiceOutlined />,
+    label: 'Техподдержка',
+  },
   { key: `${base}/users`, icon: <UserOutlined />, label: 'Пользователи' },
 ];
 
@@ -167,4 +173,9 @@ export const curatorMenu = (base: '/curator'): Item[] => [
   { key: `${base}/students`, icon: <TeamOutlined />, label: 'Ученики' },
   { key: `${base}/analytics`, icon: <BarChartOutlined />, label: 'Аналитика' },
   { key: `${base}/xp`, icon: <TrophyOutlined />, label: 'XP / лидерборд' },
+  {
+    key: `${base}/support`,
+    icon: <CustomerServiceOutlined />,
+    label: 'Поддержка курса',
+  },
 ];

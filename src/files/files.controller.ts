@@ -14,7 +14,7 @@ import { StoredFileOwnerType } from '@prisma/client';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { AuthUser } from '../rbac/auth-user';
 import { UploadFileDto } from './dto/upload-file.dto';
-import { MAX_PNG_PDF_BYTES } from './files.mime';
+import { MAX_UPLOAD_BYTES } from './files.mime';
 import { FilesService } from './files.service';
 
 @Controller()
@@ -24,7 +24,7 @@ export class FilesController {
   @Post('files')
   @UseInterceptors(
     FileInterceptor('file', {
-      limits: { fileSize: MAX_PNG_PDF_BYTES },
+      limits: { fileSize: MAX_UPLOAD_BYTES },
     }),
   )
   upload(

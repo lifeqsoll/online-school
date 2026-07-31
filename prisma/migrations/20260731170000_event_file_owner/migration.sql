@@ -1,0 +1,2 @@
+-- AlterEnum
+ALTER TYPE "StoredFileOwnerType" ADD VALUE 'COURSE_EVENT_MATERIAL';

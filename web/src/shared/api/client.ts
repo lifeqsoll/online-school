@@ -51,6 +51,9 @@ function humanizeError(status: number, raw: string): string {
     ) {
       return 'Неверный email или пароль';
     }
+    if (lower.includes('invalid or expired reset')) {
+      return 'Ссылка для сброса недействительна или устарела';
+    }
     if (lower.includes('token')) return 'Сессия истекла — войдите снова';
     return raw || 'Нужна авторизация';
   }

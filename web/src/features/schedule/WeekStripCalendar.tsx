@@ -8,6 +8,7 @@ import { useNavigate } from 'react-router-dom';
 import { AnimatePresence, motion } from 'framer-motion';
 import { easeOutExpo } from '../../shared/motion';
 import { courseColor } from '../../shared/schedule/courseColor';
+import { FileList } from '../../shared/files/FileList';
 
 dayjs.extend(isoWeek);
 dayjs.locale('ru');
@@ -161,6 +162,14 @@ function EventModal({
           </motion.button>
         )}
       </div>
+      <Typography.Title level={5} style={{ marginTop: 20, marginBottom: 8 }}>
+        Материалы
+      </Typography.Title>
+      <FileList
+        ownerType="COURSE_EVENT_MATERIAL"
+        ownerId={event.id}
+        canDelete={false}
+      />
     </Modal>
   );
 }

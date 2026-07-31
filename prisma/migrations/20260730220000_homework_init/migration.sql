@@ -218,3 +218,6 @@ ALTER TABLE "AssignmentBestXp" ADD CONSTRAINT "AssignmentBestXp_assignmentId_fke
 
 -- AddForeignKey
 ALTER TABLE "AssignmentBestXp" ADD CONSTRAINT "AssignmentBestXp_submissionId_fkey" FOREIGN KEY ("submissionId") REFERENCES "Submission"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+
+-- Deferred from course_events: Assignment must exist first
+ALTER TABLE "CourseEvent" ADD CONSTRAINT "CourseEvent_assignmentId_fkey" FOREIGN KEY ("assignmentId") REFERENCES "Assignment"("id") ON DELETE SET NULL ON UPDATE CASCADE;
