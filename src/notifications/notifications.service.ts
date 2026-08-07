@@ -231,6 +231,26 @@ export class NotificationsService {
         ],
       };
     }
+    if (channel === 'STAFF_TECH') {
+      return {
+        ...base,
+        OR: [
+          { linkUrl: '/admin/support' },
+          { linkUrl: '/support/inbox' },
+          { linkUrl: '/support' },
+        ],
+        NOT: { linkUrl: { contains: 'channel=COURSE' } },
+      };
+    }
+    if (channel === 'STAFF_COURSE') {
+      return {
+        ...base,
+        OR: [
+          { linkUrl: '/curator/support' },
+          { linkUrl: { contains: 'channel=COURSE' } },
+        ],
+      };
+    }
     return {
       ...base,
       linkUrl: this.linkForSupportChannel(channel),
@@ -400,46 +420,118 @@ export class NotificationsService {
     excludeUserId?: string;
   }) {
     const isTech = params.channel === 'TECH';
-    let userIds: string[] = [];
+    const body = `${params.subject}: ${params.preview}`.slice(0, 200);
+    const meta = {
+      threadId: params.threadId,
+      audience: 'staff' as const,
+      supportChannel: params.channel,
+    };
 
     if (isTech) {
-      // Explicit string — avoid empty/undefined enum matching all rows
-      const admins = await this.prisma.user.findMany({
-        where: { globalRole: 'ADMIN', isActive: true },
-        select: { id: true },
-      });
-      userIds = admins.map((a) => a.id);
-    } else if (params.courseId) {
-      const curators = await this.prisma.courseMembership.findMany({
+      const staff = await this.prisma.user.findMany({
         where: {
-          courseId: params.courseId,
-          role: MembershipRole.CURATOR,
+          globalRole: { in: [GlobalRole.ADMIN, GlobalRole.SUPPORT] },
+          isActive: true,
+          notifySupportTech: true,
         },
-        select: { userId: true },
+        select: { id: true, globalRole: true },
       });
-      userIds = [...new Set(curators.map((c) => c.userId))];
+      const exclude = params.excludeUserId;
+      const adminIds = staff
+        .filter((s) => s.globalRole === GlobalRole.ADMIN)
+        .map((s) => s.id)
+        .filter((id) => id !== exclude);
+      const supportIds = staff
+        .filter((s) => s.globalRole === GlobalRole.SUPPORT)
+        .map((s) => s.id)
+        .filter((id) => id !== exclude);
+
+      let count = 0;
+      if (adminIds.length) {
+        const r = await this.createMany(adminIds, {
+          kind: NotificationKind.SUPPORT_REPLY,
+          channel: NotificationChannel.TOAST,
+          title: 'Новое сообщение в техподдержке',
+          body,
+          courseId: params.courseId ?? undefined,
+          linkUrl: '/admin/support',
+          meta,
+        });
+        count += r.count;
+      }
+      if (supportIds.length) {
+        const r = await this.createMany(supportIds, {
+          kind: NotificationKind.SUPPORT_REPLY,
+          channel: NotificationChannel.TOAST,
+          title: 'Новое сообщение в техподдержке',
+          body,
+          courseId: params.courseId ?? undefined,
+          linkUrl: '/support/inbox',
+          meta,
+        });
+        count += r.count;
+      }
+      return { count };
     }
 
-    if (params.excludeUserId) {
-      userIds = userIds.filter((id) => id !== params.excludeUserId);
-    }
+    if (!params.courseId) return { count: 0 };
 
-    if (!userIds.length) return { count: 0 };
-
-    return this.createMany(userIds, {
-      kind: NotificationKind.SUPPORT_REPLY,
-      channel: NotificationChannel.TOAST,
-      title: isTech ? 'Новое сообщение в техподдержке' : 'Сообщение ученика',
-      body: `${params.subject}: ${params.preview}`.slice(0, 200),
-      courseId: params.courseId ?? undefined,
-      // Admins open admin inbox; curators open curator inbox — never student routes
-      linkUrl: isTech ? '/admin/support' : '/curator/support',
-      meta: {
-        threadId: params.threadId,
-        audience: 'staff',
-        supportChannel: params.channel,
+    const curators = await this.prisma.courseMembership.findMany({
+      where: {
+        courseId: params.courseId,
+        role: MembershipRole.CURATOR,
+      },
+      select: {
+        userId: true,
+        user: { select: { notifySupportCourse: true, isActive: true } },
       },
     });
+
+    let curatorIds = curators
+      .filter((c) => c.user.isActive && c.user.notifySupportCourse)
+      .map((c) => c.userId);
+
+    const admins = await this.prisma.user.findMany({
+      where: {
+        globalRole: GlobalRole.ADMIN,
+        isActive: true,
+        notifySupportCourse: true,
+      },
+      select: { id: true },
+    });
+    let adminIds = admins.map((a) => a.id);
+
+    if (params.excludeUserId) {
+      curatorIds = curatorIds.filter((id) => id !== params.excludeUserId);
+      adminIds = adminIds.filter((id) => id !== params.excludeUserId);
+    }
+
+    let count = 0;
+    if (curatorIds.length) {
+      const r = await this.createMany(curatorIds, {
+        kind: NotificationKind.SUPPORT_REPLY,
+        channel: NotificationChannel.TOAST,
+        title: 'Сообщение ученика',
+        body,
+        courseId: params.courseId,
+        linkUrl: '/curator/support',
+        meta,
+      });
+      count += r.count;
+    }
+    if (adminIds.length) {
+      const r = await this.createMany(adminIds, {
+        kind: NotificationKind.SUPPORT_REPLY,
+        channel: NotificationChannel.TOAST,
+        title: 'Сообщение ученика (курс)',
+        body,
+        courseId: params.courseId,
+        linkUrl: '/admin/support?channel=COURSE',
+        meta,
+      });
+      count += r.count;
+    }
+    return { count };
   }
 
   async notifyHwGraded(params: {

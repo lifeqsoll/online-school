@@ -39,4 +39,19 @@ export class UpdateProfileDto {
   @IsOptional()
   @IsBoolean()
   notifyHwSubmitted?: boolean;
+
+  /** Admin only: receive course review moderation toasts */
+  @IsOptional()
+  @IsBoolean()
+  notifyCourseReviews?: boolean;
+
+  /** Admin: TECH support toasts */
+  @IsOptional()
+  @IsBoolean()
+  notifySupportTech?: boolean;
+
+  /** Admin: COURSE support toasts */
+  @IsOptional()
+  @IsBoolean()
+  notifySupportCourse?: boolean;
 }

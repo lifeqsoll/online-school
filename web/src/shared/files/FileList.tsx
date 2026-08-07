@@ -16,7 +16,9 @@ export type FileOwnerType =
   | 'ASSIGNMENT_MATERIAL'
   | 'SUBMISSION_ATTACHMENT'
   | 'COURSE_EVENT_MATERIAL'
-  | 'COURSE_MATERIAL';
+  | 'COURSE_MATERIAL'
+  | 'COURSE_REVIEW'
+  | 'SUPPORT_MESSAGE';
 
 export type StoredFileRow = {
   id: string;

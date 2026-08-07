@@ -40,6 +40,11 @@ export class CreateLessonDto {
   scheduledAt?: string | null;
 
   @IsOptional()
+  @ValidateIf((_, v) => v !== null)
+  @IsISO8601()
+  endsAt?: string | null;
+
+  @IsOptional()
   @ValidateIf((_, v) => v !== null && v !== '')
   @IsUrl({ require_protocol: true })
   meetingUrl?: string | null;
@@ -82,6 +87,11 @@ export class UpdateLessonDto {
   @ValidateIf((_, v) => v !== null)
   @IsISO8601()
   scheduledAt?: string | null;
+
+  @IsOptional()
+  @ValidateIf((_, v) => v !== null)
+  @IsISO8601()
+  endsAt?: string | null;
 
   @IsOptional()
   @ValidateIf((_, v) => v !== null && v !== '')

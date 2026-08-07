@@ -5,9 +5,10 @@ import {
   StarFilled,
 } from '@ant-design/icons';
 import dayjs from 'dayjs';
+import isoWeek from 'dayjs/plugin/isoWeek';
 import { Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { useMemo } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { api } from '../../shared/api/client';
 import {
   WeekStripCalendar,
@@ -21,6 +22,8 @@ import {
   resolveLessonKind,
 } from '../../shared/lessons/lessonTypeIcon';
 
+dayjs.extend(isoWeek);
+
 type Enrollment = {
   courseId: string;
   course: {
@@ -31,16 +34,42 @@ type Enrollment = {
   };
 };
 
+function defaultWeekRange() {
+  const start = dayjs().startOf('isoWeek');
+  return {
+    from: start.startOf('day').toISOString(),
+    to: start.add(6, 'day').endOf('day').toISOString(),
+  };
+}
+
 export function LkHomePage() {
-  const from = dayjs().startOf('day').toISOString();
-  const to = dayjs().add(6, 'day').endOf('day').toISOString();
-  const upcomingTo = dayjs().add(2, 'day').endOf('day');
+  const [weekRange, setWeekRange] = useState(defaultWeekRange);
+  const onWeekRangeChange = useCallback(
+    (range: { from: string; to: string }) => {
+      setWeekRange((prev) =>
+        prev.from === range.from && prev.to === range.to ? prev : range,
+      );
+    },
+    [],
+  );
+
+  const upcomingFrom = dayjs().startOf('day').toISOString();
+  const upcomingToIso = dayjs().add(7, 'day').endOf('day').toISOString();
+  const upcomingTo = dayjs(upcomingToIso);
 
   const cal = useQuery({
-    queryKey: ['me-calendar', 'home-week', from, to],
+    queryKey: ['me-calendar', 'home-week', weekRange.from, weekRange.to],
     queryFn: () =>
       api<CalEvent[]>(
-        `/me/calendar?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`,
+        `/me/calendar?from=${encodeURIComponent(weekRange.from)}&to=${encodeURIComponent(weekRange.to)}`,
+      ),
+  });
+
+  const upcomingCal = useQuery({
+    queryKey: ['me-calendar', 'home-upcoming', upcomingFrom, upcomingToIso],
+    queryFn: () =>
+      api<CalEvent[]>(
+        `/me/calendar?from=${encodeURIComponent(upcomingFrom)}&to=${encodeURIComponent(upcomingToIso)}`,
       ),
   });
 
@@ -51,7 +80,7 @@ export function LkHomePage() {
 
   const upcomingLessons = useMemo(() => {
     const now = dayjs();
-    const list = Array.isArray(cal.data) ? cal.data : [];
+    const list = Array.isArray(upcomingCal.data) ? upcomingCal.data : [];
     return list
       .filter((e) => {
         if (e.type !== 'LIVE') return false;
@@ -64,7 +93,7 @@ export function LkHomePage() {
       })
       .sort((a, b) => dayjs(a.startsAt).valueOf() - dayjs(b.startsAt).valueOf())
       .slice(0, 5);
-  }, [cal.data, upcomingTo]);
+  }, [upcomingCal.data, upcomingTo]);
 
   return (
     <div style={{ maxWidth: 1100 }}>
@@ -73,7 +102,10 @@ export function LkHomePage() {
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.4, ease: [0.22, 1, 0.36, 1] }}
       >
-        <WeekStripCalendar events={Array.isArray(cal.data) ? cal.data : []} />
+        <WeekStripCalendar
+          events={Array.isArray(cal.data) ? cal.data : []}
+          onRangeChange={onWeekRangeChange}
+        />
       </motion.div>
 
       <Link to="/lk/support/course" style={{ textDecoration: 'none', color: 'inherit' }}>
@@ -241,7 +273,7 @@ export function LkHomePage() {
           Ближайшие уроки
         </Typography.Title>
         <Typography.Text type="secondary" style={{ fontSize: 13 }}>
-          На ближайшие 2 дня · до 5 занятий
+          На ближайшие 7 дней · до 5 занятий
         </Typography.Text>
       </div>
 
@@ -376,9 +408,9 @@ export function LkHomePage() {
           </motion.div>
           );
         })}
-        {!cal.isLoading && upcomingLessons.length === 0 ? (
+        {!upcomingCal.isLoading && upcomingLessons.length === 0 ? (
           <Typography.Text type="secondary">
-            На ближайшие два дня занятий нет
+            На ближайшие 7 дней занятий нет
           </Typography.Text>
         ) : null}
       </motion.div>

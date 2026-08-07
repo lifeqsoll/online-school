@@ -41,11 +41,11 @@ export class CoursesService {
         where: { isPublished: true },
         orderBy: { createdAt: 'desc' },
       });
-      return Promise.all(rows.map((c) => this.present(c)));
+      return this.presentMany(rows);
     }
     if (user.realGlobalRole === 'ADMIN') {
       rows = await this.prisma.course.findMany({ orderBy: { createdAt: 'desc' } });
-      return Promise.all(rows.map((c) => this.present(c)));
+      return this.presentMany(rows);
     }
     const memberships = await this.prisma.courseMembership.findMany({
       where: { userId: user.id, role: MembershipRole.CURATOR },
@@ -57,7 +57,7 @@ export class CoursesService {
         where: { id: { in: managedIds } },
         orderBy: { createdAt: 'desc' },
       });
-      return Promise.all(rows.map((c) => this.present(c)));
+      return this.presentMany(rows);
     }
     rows = await this.prisma.course.findMany({
       where: {
@@ -65,7 +65,7 @@ export class CoursesService {
       },
       orderBy: { createdAt: 'desc' },
     });
-    return Promise.all(rows.map((c) => this.present(c)));
+    return this.presentMany(rows);
   }
 
   async get(idOrSlug: string) {
@@ -469,6 +469,7 @@ export class CoursesService {
   >(
     course: T,
     opts?: { withMaterials?: boolean },
+    ratingStats?: { avg: number; count: number },
   ): Promise<
     Omit<T, 'coverStorageKey' | 'promoStorageKey'> & {
       coverUrl: string | null;
@@ -480,6 +481,8 @@ export class CoursesService {
         sizeBytes: number;
         url: string;
       }>;
+      ratingAvg?: number;
+      ratingCount?: number;
     }
   > {
     let coverUrl: string | null = null;
@@ -562,12 +565,49 @@ export class CoursesService {
       coverStorageKey?: string | null;
       promoStorageKey?: string | null;
     };
+
+    let rating = ratingStats;
+    if (!rating && course.id) {
+      const m = await this.ratingStatsForCourses([course.id]);
+      rating = m.get(course.id) ?? { avg: 0, count: 0 };
+    }
+
     return {
       ...(rest as Omit<T, 'coverStorageKey' | 'promoStorageKey'>),
       coverUrl,
       promoPlayback,
       ...(catalogMaterials ? { catalogMaterials } : {}),
+      ratingAvg: rating?.avg ?? 0,
+      ratingCount: rating?.count ?? 0,
     };
+  }
+
+  private async presentMany(rows: CourseRow[]) {
+    const ids = rows.map((r) => r.id);
+    const stats = await this.ratingStatsForCourses(ids);
+    return Promise.all(
+      rows.map((c) =>
+        this.present(c, undefined, stats.get(c.id) ?? { avg: 0, count: 0 }),
+      ),
+    );
+  }
+
+  private async ratingStatsForCourses(courseIds: string[]) {
+    const map = new Map<string, { avg: number; count: number }>();
+    if (!courseIds.length) return map;
+    const groups = await this.prisma.courseReview.groupBy({
+      by: ['courseId'],
+      where: { courseId: { in: courseIds }, publishedRating: { not: null } },
+      _avg: { publishedRating: true },
+      _count: { _all: true },
+    });
+    for (const g of groups) {
+      map.set(g.courseId, {
+        avg: Math.round((g._avg.publishedRating ?? 0) * 10) / 10,
+        count: g._count._all,
+      });
+    }
+    return map;
   }
 
   private async uniqueSlug(title: string): Promise<string> {

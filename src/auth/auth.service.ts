@@ -274,7 +274,12 @@ export class AuthService {
       emailVerifiedAt: user.emailVerifiedAt,
       createdAt: user.createdAt,
       ...(user.globalRole === 'ADMIN'
-        ? { notifyHwSubmitted: user.notifyHwSubmitted }
+        ? {
+            notifyHwSubmitted: user.notifyHwSubmitted,
+            notifyCourseReviews: user.notifyCourseReviews,
+            notifySupportTech: user.notifySupportTech,
+            notifySupportCourse: user.notifySupportCourse,
+          }
         : {}),
     };
   }

@@ -19,6 +19,14 @@ export class CourseAccessService {
     return this.isCurator(user.id, courseId);
   }
 
+  /** Admin or SUPPORT — student toolkit (not course content editing). */
+  isSupportOps(user: AuthUser): boolean {
+    return (
+      user.realGlobalRole === GlobalRole.ADMIN ||
+      user.realGlobalRole === GlobalRole.SUPPORT
+    );
+  }
+
   async hasContentAccess(user: AuthUser, courseId: string): Promise<boolean> {
     if (user.realGlobalRole === GlobalRole.ADMIN) return true;
     if (await this.isCurator(user.id, courseId)) return true;

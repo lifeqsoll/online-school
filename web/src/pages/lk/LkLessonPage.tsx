@@ -1,9 +1,13 @@
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { Spin, Typography } from 'antd';
-import { CheckCircleFilled, LockOutlined } from '@ant-design/icons';
+import {
+  ArrowLeftOutlined,
+  CheckCircleFilled,
+  LockOutlined,
+} from '@ant-design/icons';
 import dayjs from 'dayjs';
-import { useEffect, useRef, useState } from 'react';
-import { useParams } from 'react-router-dom';
+import { useEffect, useRef, useState, type CSSProperties } from 'react';
+import { Link, useNavigate, useParams } from 'react-router-dom';
 import { api, ApiError } from '../../shared/api/client';
 import { FileList } from '../../shared/files/FileList';
 import {
@@ -12,10 +16,18 @@ import {
   resolveLessonKind,
 } from '../../shared/lessons/lessonTypeIcon';
 
+type LinkedHw = {
+  id: string;
+  title: string;
+  maxXp?: number;
+  done?: boolean;
+};
+
 type LessonView = {
   id: string;
   title: string;
   type: string;
+  courseId?: string;
   content?: string | null;
   meetingUrl?: string | null;
   videoUrl?: string | null;
@@ -25,6 +37,7 @@ type LessonView = {
   contentOpen: boolean;
   unlocksAt?: string | null;
   contentUnlockDaysBefore?: number;
+  linkedAssignments?: LinkedHw[];
 };
 
 type Playback = {
@@ -37,6 +50,7 @@ const VIDEO_COMPLETE_PCT = 80;
 
 export function LkLessonPage() {
   const { lessonId = '' } = useParams();
+  const nav = useNavigate();
   const [completed, setCompleted] = useState(false);
   const dwellAccRef = useRef(0);
   const dwellTickRef = useRef<number | null>(null);
@@ -89,6 +103,7 @@ export function LkLessonPage() {
     kind === 'LIVE' ||
     kind === 'TEXT' ||
     (isVideoLike && !useVideoProgress);
+  const linkedHw = lesson?.linkedAssignments ?? [];
 
   // VIEW on open
   useEffect(() => {
@@ -156,11 +171,23 @@ export function LkLessonPage() {
 
   return (
     <div style={{ maxWidth: 900 }}>
+      {lesson?.courseId ? (
+        <button
+          type="button"
+          onClick={() => nav(`/lk/courses/${lesson.courseId}`)}
+          style={backBtn}
+        >
+          <ArrowLeftOutlined /> К курсу
+        </button>
+      ) : null}
+
       <Typography.Title
         level={3}
-        style={{ marginTop: 0, display: 'flex', alignItems: 'center', gap: 10 }}
+        style={{ marginTop: 12, display: 'flex', alignItems: 'center', gap: 10 }}
       >
-        {lesson ? <LessonTypeIcon lesson={lesson} style={{ marginTop: 0, fontSize: 22 }} /> : null}
+        {lesson ? (
+          <LessonTypeIcon lesson={lesson} style={{ marginTop: 0, fontSize: 22 }} />
+        ) : null}
         {lesson?.title || 'Урок'}
       </Typography.Title>
 
@@ -271,6 +298,70 @@ export function LkLessonPage() {
           ) : null}
         </>
       )}
+
+      {linkedHw.length > 0 ? (
+        <div style={{ marginTop: 28 }}>
+          <Typography.Title level={5} style={{ marginBottom: 10 }}>
+            Домашнее задание
+          </Typography.Title>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            {linkedHw.map((a) => (
+              <Link
+                key={a.id}
+                to={`/lk/assignments/${a.id}`}
+                style={{ textDecoration: 'none', color: 'inherit' }}
+              >
+                <div
+                  style={{
+                    padding: '12px 14px',
+                    borderRadius: 12,
+                    border: `1px solid ${a.done ? '#b7eb8f' : '#ffe58f'}`,
+                    background: a.done ? '#f6ffed' : '#fff7e6',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    gap: 12,
+                  }}
+                >
+                  <div>
+                    <Typography.Text strong>{a.title}</Typography.Text>
+                    {a.maxXp != null ? (
+                      <Typography.Text
+                        type="secondary"
+                        style={{ display: 'block', fontSize: 12 }}
+                      >
+                        до {a.maxXp} XP
+                      </Typography.Text>
+                    ) : null}
+                  </div>
+                  {a.done ? (
+                    <span style={{ color: '#52c41a', fontWeight: 600, flexShrink: 0 }}>
+                      <CheckCircleFilled /> Сдано
+                    </span>
+                  ) : (
+                    <Typography.Text type="secondary" style={{ flexShrink: 0 }}>
+                      Открыть →
+                    </Typography.Text>
+                  )}
+                </div>
+              </Link>
+            ))}
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }
+
+const backBtn: CSSProperties = {
+  display: 'inline-flex',
+  alignItems: 'center',
+  gap: 6,
+  border: '1px solid #ebebeb',
+  background: '#fff',
+  borderRadius: 10,
+  padding: '6px 12px',
+  cursor: 'pointer',
+  fontSize: 13,
+  color: '#434343',
+};

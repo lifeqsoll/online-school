@@ -5,13 +5,18 @@ import {
   FileOutlined,
   FileImageOutlined,
 } from '@ant-design/icons';
-import { useParams } from 'react-router-dom';
+import { useParams, useSearchParams } from 'react-router-dom';
 import { motion } from 'framer-motion';
+import { useState } from 'react';
 import { api, getAccessToken } from '../../shared/api/client';
 import { useAuth } from '../../shared/auth/AuthContext';
 import { EnrollBuyButton } from '../../features/catalog/EnrollBuyButton';
 import { easeOutExpo, fadeUp, stagger } from '../../shared/motion';
 import { courseColor } from '../../shared/schedule/courseColor';
+import {
+  CourseRatingBadge,
+  CourseReviewsModal,
+} from '../../shared/reviews/CourseReviewsModal';
 
 type CourseDetail = {
   id: string;
@@ -20,6 +25,8 @@ type CourseDetail = {
   catalogBody?: string | null;
   priceCents: number;
   coverUrl?: string | null;
+  ratingAvg?: number;
+  ratingCount?: number;
   promoPlayback?: { kind: string; url: string } | null;
   catalogMaterials?: Array<{
     id: string;
@@ -63,7 +70,10 @@ function formatSize(bytes: number) {
 
 export function PublicCoursePage() {
   const { idOrSlug = '' } = useParams();
+  const [search, setSearch] = useSearchParams();
   const { user } = useAuth();
+  const writeReview = search.get('review') === '1';
+  const [reviewsOpen, setReviewsOpen] = useState(writeReview);
 
   const course = useQuery({
     queryKey: ['public-course', idOrSlug],
@@ -206,11 +216,25 @@ export function PublicCoursePage() {
             >
               {c.description || 'Описание скоро появится'}
             </Typography.Paragraph>
-            <div style={{ marginTop: 8 }}>
+            <div
+              style={{
+                marginTop: 8,
+                display: 'flex',
+                alignItems: 'center',
+                gap: 16,
+                flexWrap: 'wrap',
+              }}
+            >
               <EnrollBuyButton
                 courseId={c.id}
                 priceCents={c.priceCents}
                 enrolled={enrolled}
+              />
+              <CourseRatingBadge
+                avg={c.ratingAvg}
+                count={c.ratingCount}
+                light={hasCover}
+                onClick={() => setReviewsOpen(true)}
               />
             </div>
           </div>
@@ -353,6 +377,20 @@ export function PublicCoursePage() {
           )}
         </motion.div>
       </motion.div>
+
+      <CourseReviewsModal
+        courseId={c.id}
+        courseTitle={c.title}
+        open={reviewsOpen}
+        writeMode={writeReview}
+        onClose={() => {
+          setReviewsOpen(false);
+          if (writeReview) {
+            search.delete('review');
+            setSearch(search, { replace: true });
+          }
+        }}
+      />
     </div>
   );
 }

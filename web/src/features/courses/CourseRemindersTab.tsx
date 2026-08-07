@@ -33,6 +33,21 @@ export function CourseRemindersTab({ courseId }: { courseId: string }) {
     onError: (e: Error) => message.error(e.message || 'Ошибка'),
   });
 
+  const requestReviews = useMutation({
+    mutationFn: () =>
+      api<{ count: number }>(`/courses/${courseId}/reviews/request`, {
+        method: 'POST',
+      }),
+    onSuccess: (r) => {
+      message.success(
+        r.count
+          ? `Запрос отправлен ${r.count} ученикам`
+          : 'Некому отправлять — все уже оставили отзыв или ещё рано',
+      );
+    },
+    onError: (e: Error) => message.error(e.message || 'Ошибка'),
+  });
+
   const remove = useMutation({
     mutationFn: (reminderId: string) =>
       api(`/courses/${courseId}/reminders/${reminderId}`, { method: 'DELETE' }),
@@ -51,6 +66,18 @@ export function CourseRemindersTab({ courseId }: { courseId: string }) {
       <Typography.Paragraph type="secondary" style={{ marginTop: 0 }}>
         Напоминание сразу всплывёт у всех активных учеников курса, как сообщение
         в мессенджере.
+      </Typography.Paragraph>
+
+      <Button
+        style={{ marginBottom: 20 }}
+        onClick={() => requestReviews.mutate()}
+        loading={requestReviews.isPending}
+      >
+        Попросить отзыв
+      </Button>
+      <Typography.Paragraph type="secondary" style={{ marginTop: -12, fontSize: 12 }}>
+        Уведомление получат все активные ученики без отзыва. Авто-напоминания —
+        только после 3 дней на курсе и не чаще раза в неделю.
       </Typography.Paragraph>
 
       <Form

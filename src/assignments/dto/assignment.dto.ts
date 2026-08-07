@@ -50,6 +50,17 @@ export class QuestionDto {
   @IsOptional()
   @IsNumber()
   numberTolerance?: number;
+
+  /** CHOICE: allow selecting multiple options */
+  @IsOptional()
+  @IsBoolean()
+  allowMultiple?: boolean;
+
+  /** OPEN: max answer length (default 500) */
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  maxAnswerLength?: number;
 }
 
 export class CreateAssignmentDto {

@@ -4,7 +4,7 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { AuditAction, CourseEventType, EnrollmentStatus, LessonType, VideoSource } from '@prisma/client';
+import { AuditAction, CourseEventType, EnrollmentStatus, LessonType, SubmissionStatus, VideoSource } from '@prisma/client';
 import { AuditService } from '../audit/audit.service';
 import { CourseAccessService } from '../enrollments/course-access.service';
 import { NotificationsService } from '../notifications/notifications.service';
@@ -45,6 +45,7 @@ export class LessonsService {
         sortOrder: dto.sortOrder ?? 0,
         isPublished: dto.isPublished ?? false,
         scheduledAt: dto.scheduledAt ? new Date(dto.scheduledAt) : null,
+        endsAt: dto.endsAt ? new Date(dto.endsAt) : null,
         meetingUrl: dto.meetingUrl === undefined ? null : dto.meetingUrl,
         contentUnlockDaysBefore: dto.contentUnlockDaysBefore ?? 7,
         contentUnlockedForAll: dto.contentUnlockedForAll ?? false,
@@ -68,6 +69,9 @@ export class LessonsService {
 
     if (dto.scheduledAt !== undefined) {
       data.scheduledAt = dto.scheduledAt ? new Date(dto.scheduledAt) : null;
+    }
+    if (dto.endsAt !== undefined) {
+      data.endsAt = dto.endsAt ? new Date(dto.endsAt) : null;
     }
     if (dto.meetingUrl !== undefined) {
       data.meetingUrl = dto.meetingUrl === '' ? null : dto.meetingUrl;
@@ -127,6 +131,34 @@ export class LessonsService {
       lesson.module.courseId,
     );
 
+    const hwRows = await this.prisma.assignment.findMany({
+      where: {
+        lessonId: id,
+        ...(canManage ? {} : { isPublished: true }),
+      },
+      select: { id: true, title: true, maxXp: true, responseMode: true },
+      orderBy: { sortOrder: 'asc' },
+    });
+    const submitted = hwRows.length
+      ? await this.prisma.submission.findMany({
+          where: {
+            userId: actor.id,
+            assignmentId: { in: hwRows.map((a) => a.id) },
+            status: { not: SubmissionStatus.IN_PROGRESS },
+          },
+          select: { assignmentId: true },
+          distinct: ['assignmentId'],
+        })
+      : [];
+    const doneIds = new Set(submitted.map((s) => s.assignmentId));
+    const linkedAssignments = hwRows.map((a) => ({
+      id: a.id,
+      title: a.title,
+      maxXp: a.maxXp,
+      responseMode: a.responseMode,
+      done: doneIds.has(a.id),
+    }));
+
     const base = {
       id: lesson.id,
       title: lesson.title,
@@ -140,6 +172,7 @@ export class LessonsService {
       contentOpen: access.open,
       unlocksAt: access.unlocksAt,
       grantedToYou: access.grantedToYou,
+      linkedAssignments,
     };
 
     if (canManage || access.open) {
@@ -363,6 +396,7 @@ export class LessonsService {
       id: string;
       title: string;
       scheduledAt: Date | null;
+      endsAt?: Date | null;
       meetingUrl: string | null;
     },
     courseId: string,
@@ -380,7 +414,14 @@ export class LessonsService {
       return;
     }
 
-    const endsAt = new Date(lesson.scheduledAt.getTime() + 60 * 60 * 1000);
+    if (lesson.endsAt && lesson.endsAt <= lesson.scheduledAt) {
+      throw new BadRequestException('endsAt must be after scheduledAt');
+    }
+
+    const endsAt =
+      lesson.endsAt && lesson.endsAt > lesson.scheduledAt
+        ? lesson.endsAt
+        : new Date(lesson.scheduledAt.getTime() + 60 * 60 * 1000);
     if (existing) {
       await this.prisma.courseEvent.update({
         where: { id: existing.id },
@@ -392,21 +433,50 @@ export class LessonsService {
           type: CourseEventType.LIVE,
         },
       });
-      return;
+    } else {
+      await this.prisma.courseEvent.create({
+        data: {
+          courseId,
+          title: lesson.title,
+          type: CourseEventType.LIVE,
+          startsAt: lesson.scheduledAt,
+          endsAt,
+          meetingUrl: lesson.meetingUrl,
+          lessonId: lesson.id,
+          createdById: actorId,
+        },
+      });
     }
 
-    await this.prisma.courseEvent.create({
-      data: {
-        courseId,
-        title: lesson.title,
-        type: CourseEventType.LIVE,
-        startsAt: lesson.scheduledAt,
-        endsAt,
-        meetingUrl: lesson.meetingUrl,
-        lessonId: lesson.id,
-        createdById: actorId,
-      },
+    // Refresh DEADLINE events for lesson-linked HW without dueAt
+    const linked = await this.prisma.assignment.findMany({
+      where: { lessonId: lesson.id, dueAt: null },
+      select: { id: true, title: true },
     });
+    for (const a of linked) {
+      const deadline = await this.prisma.courseEvent.findFirst({
+        where: { assignmentId: a.id, type: CourseEventType.DEADLINE },
+      });
+      if (deadline) {
+        await this.prisma.courseEvent.update({
+          where: { id: deadline.id },
+          data: { startsAt: lesson.scheduledAt, endsAt: lesson.scheduledAt },
+        });
+      } else {
+        await this.prisma.courseEvent.create({
+          data: {
+            courseId,
+            title: `ДЗ: ${a.title}`,
+            type: CourseEventType.DEADLINE,
+            startsAt: lesson.scheduledAt,
+            endsAt: lesson.scheduledAt,
+            assignmentId: a.id,
+            lessonId: lesson.id,
+            createdById: actorId,
+          },
+        });
+      }
+    }
   }
 
   private async getLessonWithCourse(id: string) {

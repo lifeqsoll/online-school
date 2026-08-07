@@ -34,9 +34,26 @@ type DraftQuestion = {
   points: number;
   options?: { id: string; text: string }[];
   correctKeys?: string[];
+  allowMultiple?: boolean;
+  maxAnswerLength?: number;
   shortMatch?: 'EXACT' | 'NUMBER';
   numberTolerance?: number;
 };
+
+function defaultPoints(type: QType) {
+  if (type === 'CHOICE') return 1;
+  if (type === 'SHORT') return 3;
+  return 5;
+}
+
+function nextOptionId(options: { id: string }[]) {
+  const used = new Set(options.map((o) => o.id));
+  for (let i = 0; i < 52; i++) {
+    const id = String.fromCharCode(97 + (i % 26)) + (i >= 26 ? String(Math.floor(i / 26)) : '');
+    if (!used.has(id)) return id;
+  }
+  return `o${Date.now()}`;
+}
 
 type ModuleOpt = {
   id: string;
@@ -88,7 +105,8 @@ export function AssignmentConstructor({
       key: 'q1',
       type: 'CHOICE',
       prompt: 'Выберите верный ответ',
-      points: 5,
+      points: 1,
+      allowMultiple: false,
       options: [
         { id: 'a', text: 'Вариант A' },
         { id: 'b', text: 'Вариант B' },
@@ -126,7 +144,7 @@ export function AssignmentConstructor({
       key,
       type,
       prompt: type === 'OPEN' ? 'Развёрнутый ответ' : 'Вопрос',
-      points: type === 'OPEN' ? 10 : 5,
+      points: defaultPoints(type),
     };
     if (type === 'CHOICE') {
       base.options = [
@@ -134,11 +152,15 @@ export function AssignmentConstructor({
         { id: 'b', text: 'Вариант B' },
       ];
       base.correctKeys = ['a'];
+      base.allowMultiple = false;
     }
     if (type === 'SHORT') {
       base.correctKeys = ['42'];
       base.shortMatch = 'NUMBER';
       base.numberTolerance = 0;
+    }
+    if (type === 'OPEN') {
+      base.maxAnswerLength = 500;
     }
     setQuestions((qs) => [...qs, base]);
     setActive(key);
@@ -164,7 +186,8 @@ export function AssignmentConstructor({
         key,
         type: 'CHOICE',
         prompt: 'Выберите верный ответ',
-        points: 5,
+        points: 1,
+        allowMultiple: false,
         options: [
           { id: 'a', text: 'Вариант A' },
           { id: 'b', text: 'Вариант B' },
@@ -198,6 +221,8 @@ export function AssignmentConstructor({
           points: number;
           options?: { id: string; text: string }[] | null;
           correctKeys?: string[] | null;
+          allowMultiple?: boolean;
+          maxAnswerLength?: number | null;
           shortMatch?: 'EXACT' | 'NUMBER' | null;
           numberTolerance?: number | null;
         }>;
@@ -220,6 +245,8 @@ export function AssignmentConstructor({
               points: q.points,
               options: q.options ?? undefined,
               correctKeys: q.correctKeys ?? undefined,
+              allowMultiple: q.allowMultiple ?? false,
+              maxAnswerLength: q.maxAnswerLength ?? (q.type === 'OPEN' ? 500 : undefined),
               shortMatch: q.shortMatch ?? undefined,
               numberTolerance: q.numberTolerance ?? undefined,
             }))
@@ -228,7 +255,8 @@ export function AssignmentConstructor({
                 key: `q${Date.now()}`,
                 type: 'CHOICE',
                 prompt: 'Выберите верный ответ',
-                points: 5,
+                points: 1,
+                allowMultiple: false,
                 options: [
                   { id: 'a', text: 'Вариант A' },
                   { id: 'b', text: 'Вариант B' },
@@ -261,6 +289,9 @@ export function AssignmentConstructor({
           sortOrder: i,
           options: q.type === 'CHOICE' ? q.options : undefined,
           correctKeys: q.type === 'OPEN' ? undefined : q.correctKeys,
+          allowMultiple: q.type === 'CHOICE' ? !!q.allowMultiple : undefined,
+          maxAnswerLength:
+            q.type === 'OPEN' ? q.maxAnswerLength ?? 500 : undefined,
           shortMatch: q.type === 'SHORT' ? q.shortMatch : undefined,
           numberTolerance:
             q.type === 'SHORT' && q.shortMatch === 'NUMBER'
@@ -338,6 +369,9 @@ export function AssignmentConstructor({
         if (mode === 'publish') message.success('Задание опубликовано');
         else if (mode === 'draft') message.success('Черновик сохранён');
         qc.invalidateQueries({ queryKey: ['assignments', courseId] });
+        qc.invalidateQueries({ queryKey: ['me-calendar'] });
+        qc.invalidateQueries({ queryKey: ['course-events', courseId] });
+        qc.invalidateQueries({ queryKey: ['course-events-student', courseId] });
         return true;
       }
 
@@ -379,6 +413,9 @@ export function AssignmentConstructor({
         message.success('Черновик создан (ученики его не видят)');
       }
       qc.invalidateQueries({ queryKey: ['assignments', courseId] });
+      qc.invalidateQueries({ queryKey: ['me-calendar'] });
+      qc.invalidateQueries({ queryKey: ['course-events', courseId] });
+      qc.invalidateQueries({ queryKey: ['course-events-student', courseId] });
       return true;
     } catch (e) {
       if (mode !== 'autosave') {
@@ -446,13 +483,18 @@ export function AssignmentConstructor({
                   background: q.key === active ? 'var(--accent-soft)' : undefined,
                   padding: 8,
                   borderRadius: 8,
+                  minWidth: 0,
                 }}
               >
-                <div>
+                <div style={{ minWidth: 0, width: '100%', overflow: 'hidden' }}>
                   <div style={{ fontSize: 12, color: '#8c8c8c' }}>
                     Вопрос {idx + 1} · {q.type}
                   </div>
-                  <Typography.Text type="secondary" ellipsis>
+                  <Typography.Text
+                    type="secondary"
+                    ellipsis
+                    style={{ display: 'block', maxWidth: '100%' }}
+                  >
                     {q.prompt}
                   </Typography.Text>
                 </div>
@@ -593,13 +635,16 @@ export function AssignmentConstructor({
                 <Input.TextArea
                   rows={3}
                   value={current.prompt}
-                  onChange={(e) =>
+                  maxLength={2000}
+                  showCount
+                  onChange={(e) => {
                     setQuestions((qs) =>
                       qs.map((q) =>
                         q.key === current.key ? { ...q, prompt: e.target.value } : q,
                       ),
-                    )
-                  }
+                    );
+                    markDirty();
+                  }}
                 />
                 <InputNumber
                   addonBefore="Баллы"
@@ -616,26 +661,83 @@ export function AssignmentConstructor({
 
                 {current.type === 'CHOICE' && (
                   <div>
-                    <Typography.Text strong>Варианты (отметьте верные)</Typography.Text>
-                    {(current.options ?? []).map((opt, idx) => (
-                      <Space key={opt.id} style={{ display: 'flex', marginTop: 8 }}>
-                        <Checkbox
-                          checked={current.correctKeys?.includes(opt.id)}
-                          onChange={(e) => {
-                            const keys = new Set(current.correctKeys ?? []);
-                            if (e.target.checked) keys.add(opt.id);
-                            else keys.delete(opt.id);
+                    <div
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        gap: 12,
+                        marginBottom: 8,
+                      }}
+                    >
+                      <Typography.Text strong>Варианты</Typography.Text>
+                      <Space>
+                        <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+                          Несколько ответов
+                        </Typography.Text>
+                        <Switch
+                          size="small"
+                          checked={!!current.allowMultiple}
+                          onChange={(checked) => {
                             setQuestions((qs) =>
-                              qs.map((q) =>
-                                q.key === current.key
-                                  ? { ...q, correctKeys: [...keys] }
-                                  : q,
-                              ),
+                              qs.map((q) => {
+                                if (q.key !== current.key) return q;
+                                const keys = q.correctKeys ?? [];
+                                return {
+                                  ...q,
+                                  allowMultiple: checked,
+                                  correctKeys: checked
+                                    ? keys
+                                    : keys.slice(0, 1),
+                                };
+                              }),
                             );
+                            markDirty();
                           }}
                         />
+                      </Space>
+                    </div>
+                    {(current.options ?? []).map((opt, idx) => (
+                      <Space
+                        key={opt.id}
+                        style={{ display: 'flex', marginTop: 8, width: '100%' }}
+                        align="start"
+                      >
+                        {current.allowMultiple ? (
+                          <Checkbox
+                            checked={current.correctKeys?.includes(opt.id)}
+                            onChange={(e) => {
+                              const keys = new Set(current.correctKeys ?? []);
+                              if (e.target.checked) keys.add(opt.id);
+                              else keys.delete(opt.id);
+                              setQuestions((qs) =>
+                                qs.map((q) =>
+                                  q.key === current.key
+                                    ? { ...q, correctKeys: [...keys] }
+                                    : q,
+                                ),
+                              );
+                              markDirty();
+                            }}
+                          />
+                        ) : (
+                          <Radio
+                            checked={current.correctKeys?.[0] === opt.id}
+                            onChange={() => {
+                              setQuestions((qs) =>
+                                qs.map((q) =>
+                                  q.key === current.key
+                                    ? { ...q, correctKeys: [opt.id] }
+                                    : q,
+                                ),
+                              );
+                              markDirty();
+                            }}
+                          />
+                        )}
                         <Input
                           value={opt.text}
+                          style={{ flex: 1, minWidth: 0 }}
                           onChange={(e) => {
                             const options = [...(current.options ?? [])];
                             options[idx] = { ...opt, text: e.target.value };
@@ -644,28 +746,87 @@ export function AssignmentConstructor({
                                 q.key === current.key ? { ...q, options } : q,
                               ),
                             );
+                            markDirty();
                           }}
                         />
+                        <Button
+                          danger
+                          type="text"
+                          disabled={(current.options?.length ?? 0) <= 2}
+                          onClick={() => {
+                            const options = (current.options ?? []).filter(
+                              (o) => o.id !== opt.id,
+                            );
+                            const correctKeys = (current.correctKeys ?? []).filter(
+                              (k) => k !== opt.id,
+                            );
+                            setQuestions((qs) =>
+                              qs.map((q) =>
+                                q.key === current.key
+                                  ? {
+                                      ...q,
+                                      options,
+                                      correctKeys:
+                                        correctKeys.length > 0
+                                          ? correctKeys
+                                          : options[0]
+                                            ? [options[0].id]
+                                            : [],
+                                    }
+                                  : q,
+                              ),
+                            );
+                            markDirty();
+                          }}
+                        >
+                          Удалить
+                        </Button>
                       </Space>
                     ))}
                     <Button
                       style={{ marginTop: 8 }}
                       onClick={() => {
-                        const id = String.fromCharCode(97 + (current.options?.length ?? 0));
-                        const options = [
-                          ...(current.options ?? []),
-                          { id, text: `Вариант ${id.toUpperCase()}` },
-                        ];
+                        const options = current.options ?? [];
+                        const id = nextOptionId(options);
                         setQuestions((qs) =>
                           qs.map((q) =>
-                            q.key === current.key ? { ...q, options } : q,
+                            q.key === current.key
+                              ? {
+                                  ...q,
+                                  options: [
+                                    ...options,
+                                    { id, text: `Вариант ${id.toUpperCase()}` },
+                                  ],
+                                }
+                              : q,
                           ),
                         );
+                        markDirty();
                       }}
                     >
                       + Вариант
                     </Button>
                   </div>
+                )}
+
+                {current.type === 'OPEN' && (
+                  <InputNumber
+                    addonBefore="Макс. символов ответа"
+                    min={50}
+                    max={20000}
+                    value={current.maxAnswerLength ?? 500}
+                    onChange={(v) => {
+                      setQuestions((qs) =>
+                        qs.map((q) =>
+                          q.key === current.key
+                            ? { ...q, maxAnswerLength: v ?? 500 }
+                            : q,
+                        ),
+                      );
+                      markDirty();
+                    }}
+                    style={{ width: '100%' }}
+                  />
                 )}
 
                 {current.type === 'SHORT' && (

@@ -25,7 +25,10 @@ export class AnalyticsService {
   }
 
   async radarUser(actor: AuthUser, courseId: string, userId: string) {
-    if (!(await this.access.canManageCourse(actor, courseId))) {
+    const allowed =
+      (await this.access.canManageCourse(actor, courseId)) ||
+      this.access.isSupportOps(actor);
+    if (!allowed) {
       throw new ForbiddenException();
     }
     return this.radarFor(userId, courseId);
@@ -112,7 +115,7 @@ export class AnalyticsService {
       list.map((a) => a.id),
     );
 
-    const [engagements, submissions] = await Promise.all([
+    const [engagements, submissions, bonuses] = await Promise.all([
       allLessonIds.length
         ? this.prisma.lessonEngagement.findMany({
             where: { userId, lessonId: { in: allLessonIds } },
@@ -144,7 +147,19 @@ export class AnalyticsService {
             },
           })
         : Promise.resolve([]),
+      this.prisma.radarBonus.findMany({
+        where: { userId, courseId },
+        select: { moduleId: true, pointsDelta: true },
+      }),
     ]);
+
+    const bonusByModule = new Map<string, number>();
+    for (const b of bonuses) {
+      bonusByModule.set(
+        b.moduleId,
+        (bonusByModule.get(b.moduleId) ?? 0) + b.pointsDelta,
+      );
+    }
 
     const lessonDone = new Set(
       engagements
@@ -191,7 +206,9 @@ export class AnalyticsService {
       const hwDone = hw.filter((a) => (bestPctByHw.get(a.id) ?? 0) >= 75)
         .length;
       const earned = lessonsDone + hwDone;
-      const pct = total === 0 ? 0 : Math.round((earned / total) * 100);
+      const basePct = total === 0 ? 0 : Math.round((earned / total) * 100);
+      const bonus = bonusByModule.get(m.id) ?? 0;
+      const pct = Math.max(0, Math.min(100, basePct + bonus));
       labels.push((m.radarLabel?.trim() || m.title).trim());
       values.push(pct);
       scaleValues.push(Math.round((pct / 100) * 8 * 10) / 10);

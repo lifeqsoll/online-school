@@ -12,6 +12,7 @@ import { AuthUser } from '../rbac/auth-user';
 import {
   CreateSupportThreadDto,
   PostSupportMessageDto,
+  RateSupportThreadDto,
 } from './dto/support.dto';
 import { SupportService } from './support.service';
 
@@ -54,5 +55,23 @@ export class SupportController {
   @Patch('threads/:id/close')
   close(@CurrentUser() user: AuthUser, @Param('id') id: string) {
     return this.support.close(user, id);
+  }
+
+  @Post('threads/:id/cancel-course')
+  cancelCourse(
+    @CurrentUser() user: AuthUser,
+    @Param('id') id: string,
+    @Body(SanitizePipe) dto: { reason?: string },
+  ) {
+    return this.support.cancelCourse(user, id, dto?.reason);
+  }
+
+  @Post('threads/:id/rating')
+  rate(
+    @CurrentUser() user: AuthUser,
+    @Param('id') id: string,
+    @Body(SanitizePipe) dto: RateSupportThreadDto,
+  ) {
+    return this.support.rate(user, id, dto);
   }
 }

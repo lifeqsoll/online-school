@@ -89,9 +89,11 @@ export function StudentShell() {
   const staffPath =
     user?.globalRole === 'ADMIN'
       ? '/admin'
-      : (managed.data?.length ?? 0) > 0
-        ? '/curator'
-        : null;
+      : user?.globalRole === 'SUPPORT'
+        ? '/support'
+        : (managed.data?.length ?? 0) > 0
+          ? '/curator'
+          : null;
 
   const totalXp = xp.data ?? 0;
 

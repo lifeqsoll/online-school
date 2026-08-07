@@ -301,6 +301,138 @@ export function LkProfilePage() {
                 }}
               />
             </div>
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                gap: 16,
+                marginTop: 20,
+              }}
+            >
+              <div>
+                <Typography.Text strong>
+                  Новые отзывы на модерацию
+                </Typography.Text>
+                <Typography.Paragraph
+                  type="secondary"
+                  style={{ margin: '4px 0 0', fontSize: 13 }}
+                >
+                  Всплывающее уведомление, когда ученик оставляет отзыв о курсе
+                </Typography.Paragraph>
+              </div>
+              <Switch
+                checked={user.notifyCourseReviews !== false}
+                onChange={async (checked) => {
+                  try {
+                    await api<AuthUser>('/users/me', {
+                      method: 'PATCH',
+                      json: { notifyCourseReviews: checked },
+                    });
+                    await refreshMe();
+                    message.success(
+                      checked
+                        ? 'Уведомления об отзывах включены'
+                        : 'Уведомления об отзывах выключены',
+                    );
+                  } catch (e) {
+                    message.error(
+                      e instanceof ApiError || e instanceof Error
+                        ? e.message
+                        : 'Ошибка',
+                    );
+                  }
+                }}
+              />
+            </div>
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                gap: 16,
+                marginTop: 20,
+              }}
+            >
+              <div>
+                <Typography.Text strong>
+                  Техподдержка
+                </Typography.Text>
+                <Typography.Paragraph
+                  type="secondary"
+                  style={{ margin: '4px 0 0', fontSize: 13 }}
+                >
+                  Новые сообщения в канале техподдержки
+                </Typography.Paragraph>
+              </div>
+              <Switch
+                checked={user.notifySupportTech !== false}
+                onChange={async (checked) => {
+                  try {
+                    await api<AuthUser>('/users/me', {
+                      method: 'PATCH',
+                      json: { notifySupportTech: checked },
+                    });
+                    await refreshMe();
+                    message.success(
+                      checked
+                        ? 'Уведомления техподдержки включены'
+                        : 'Уведомления техподдержки выключены',
+                    );
+                  } catch (e) {
+                    message.error(
+                      e instanceof ApiError || e instanceof Error
+                        ? e.message
+                        : 'Ошибка',
+                    );
+                  }
+                }}
+              />
+            </div>
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                gap: 16,
+                marginTop: 20,
+              }}
+            >
+              <div>
+                <Typography.Text strong>
+                  Поддержка курса
+                </Typography.Text>
+                <Typography.Paragraph
+                  type="secondary"
+                  style={{ margin: '4px 0 0', fontSize: 13 }}
+                >
+                  Сообщения учеников кураторам (чаты курса)
+                </Typography.Paragraph>
+              </div>
+              <Switch
+                checked={user.notifySupportCourse !== false}
+                onChange={async (checked) => {
+                  try {
+                    await api<AuthUser>('/users/me', {
+                      method: 'PATCH',
+                      json: { notifySupportCourse: checked },
+                    });
+                    await refreshMe();
+                    message.success(
+                      checked
+                        ? 'Уведомления поддержки курса включены'
+                        : 'Уведомления поддержки курса выключены',
+                    );
+                  } catch (e) {
+                    message.error(
+                      e instanceof ApiError || e instanceof Error
+                        ? e.message
+                        : 'Ошибка',
+                    );
+                  }
+                }}
+              />
+            </div>
           </div>
         ) : null}
 

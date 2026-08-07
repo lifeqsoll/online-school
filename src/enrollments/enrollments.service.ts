@@ -5,10 +5,15 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { AuditAction, EnrollmentSource } from '@prisma/client';
+import {
+  AuditAction,
+  EnrollmentSource,
+  EnrollmentStatus,
+} from '@prisma/client';
 import { AuditService } from '../audit/audit.service';
 import { CryptoService } from '../common/crypto/crypto.service';
 import { OutboxService } from '../outbox/outbox.service';
+import { RefundsService } from '../payments/refunds.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuthUser } from '../rbac/auth-user';
 import { StorageService } from '../storage/storage.service';
@@ -23,6 +28,7 @@ export class EnrollmentsService {
     private readonly outbox: OutboxService,
     private readonly storage: StorageService,
     private readonly crypto: CryptoService,
+    private readonly refunds: RefundsService,
   ) {}
 
   async enrollFree(user: AuthUser, courseId: string) {
@@ -177,6 +183,8 @@ export class EnrollmentsService {
         source: row.source,
         grantedBy: row.grantedBy,
         createdAt: row.createdAt,
+        cancelledAt: row.cancelledAt,
+        refundStatus: row.refundStatus,
         user: {
           id: row.user.id,
           displayName,
@@ -186,5 +194,61 @@ export class EnrollmentsService {
         },
       };
     });
+  }
+
+  async cancelEnrollment(
+    actor: AuthUser,
+    courseId: string,
+    userId: string,
+    opts?: { threadId?: string; reason?: string },
+  ) {
+    if (!(await this.access.canManageCourse(actor, courseId))) {
+      throw new ForbiddenException('Cannot cancel enrollment for this course');
+    }
+
+    const enrollment = await this.prisma.enrollment.findUnique({
+      where: { courseId_userId: { courseId, userId } },
+    });
+    if (!enrollment) throw new NotFoundException('Enrollment not found');
+    if (enrollment.status === EnrollmentStatus.SUSPENDED) {
+      throw new BadRequestException('Enrollment already cancelled');
+    }
+
+    const now = new Date();
+    const refundStatus = this.refunds.markEligibleIfWithinDays(enrollment, now);
+
+    const updated = await this.prisma.enrollment.update({
+      where: { id: enrollment.id },
+      data: {
+        status: EnrollmentStatus.SUSPENDED,
+        cancelledAt: now,
+        cancelledById: actor.realUserId,
+        cancelThreadId: opts?.threadId ?? null,
+        cancelReason: opts?.reason?.trim() || null,
+        refundStatus,
+      },
+    });
+
+    await this.audit.append({
+      action: AuditAction.CANCEL_ENROLL,
+      actorId: actor.realUserId,
+      targetId: userId,
+      meta: {
+        courseId,
+        enrollmentId: enrollment.id,
+        threadId: opts?.threadId ?? null,
+        refundStatus,
+      },
+    });
+
+    return {
+      id: updated.id,
+      courseId: updated.courseId,
+      userId: updated.userId,
+      status: updated.status,
+      cancelledAt: updated.cancelledAt,
+      refundStatus: updated.refundStatus,
+      refundEligible: updated.refundStatus === 'ELIGIBLE',
+    };
   }
 }

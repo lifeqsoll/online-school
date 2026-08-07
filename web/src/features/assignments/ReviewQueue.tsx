@@ -14,6 +14,7 @@ type Submission = {
   id: string;
   status: string;
   userId: string;
+  displayName?: string;
   assignment: {
     id: string;
     title: string;
@@ -70,6 +71,9 @@ export function ReviewQueue({ courseId }: { courseId: string }) {
     window.open(res.url, '_blank', 'noopener,noreferrer');
   };
 
+  const studentLabel = (r: Submission) =>
+    r.displayName?.trim() || r.userId;
+
   return (
     <div>
       <Typography.Paragraph type="secondary">
@@ -81,7 +85,14 @@ export function ReviewQueue({ courseId }: { courseId: string }) {
         dataSource={q.data ?? []}
         columns={[
           { title: 'Задание', render: (_, r) => r.assignment?.title },
-          { title: 'Ученик', dataIndex: 'userId' },
+          {
+            title: 'Ученик',
+            render: (_, r) => (
+              <Typography.Text ellipsis style={{ maxWidth: 220, display: 'block' }}>
+                {studentLabel(r)}
+              </Typography.Text>
+            ),
+          },
           {
             title: 'Файлы',
             render: (_, r) => r.files?.length ?? 0,
@@ -99,7 +110,11 @@ export function ReviewQueue({ courseId }: { courseId: string }) {
       />
 
       <Modal
-        title="Проверка"
+        title={
+          current
+            ? `Проверка · ${studentLabel(current)}`
+            : 'Проверка'
+        }
         open={!!current}
         onCancel={() => {
           setCurrent(null);
@@ -156,13 +171,24 @@ export function ReviewQueue({ courseId }: { courseId: string }) {
             {(detail.answers ?? [])
               .filter((a) => a.question?.type === 'OPEN')
               .map((a) => (
-                <div key={a.questionId} style={{ marginBottom: 16 }}>
-                  <Typography.Text strong>{a.question?.prompt}</Typography.Text>
+                <div key={a.questionId} style={{ marginBottom: 16, minWidth: 0 }}>
+                  <Typography.Paragraph
+                    strong
+                    ellipsis={{ rows: 3, expandable: true, symbol: 'ещё' }}
+                    style={{ marginBottom: 8, maxWidth: '100%' }}
+                  >
+                    {a.question?.prompt}
+                  </Typography.Paragraph>
                   <Typography.Paragraph
                     style={{
                       background: 'var(--surface)',
                       padding: 12,
                       borderRadius: 8,
+                      maxHeight: 280,
+                      overflow: 'auto',
+                      whiteSpace: 'pre-wrap',
+                      wordBreak: 'break-word',
+                      overflowWrap: 'anywhere',
                     }}
                   >
                     {String(a.value ?? '')}

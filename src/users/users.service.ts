@@ -59,6 +59,33 @@ export class UsersService {
         data.notifyHwSubmitted = dto.notifyHwSubmitted;
       }
     }
+    if (dto.notifyCourseReviews !== undefined) {
+      const existing = await this.prisma.user.findUnique({
+        where: { id },
+        select: { globalRole: true },
+      });
+      if (existing?.globalRole === 'ADMIN') {
+        data.notifyCourseReviews = dto.notifyCourseReviews;
+      }
+    }
+    if (dto.notifySupportTech !== undefined) {
+      const existing = await this.prisma.user.findUnique({
+        where: { id },
+        select: { globalRole: true },
+      });
+      if (existing?.globalRole === 'ADMIN') {
+        data.notifySupportTech = dto.notifySupportTech;
+      }
+    }
+    if (dto.notifySupportCourse !== undefined) {
+      const existing = await this.prisma.user.findUnique({
+        where: { id },
+        select: { globalRole: true },
+      });
+      if (existing?.globalRole === 'ADMIN') {
+        data.notifySupportCourse = dto.notifySupportCourse;
+      }
+    }
 
     try {
       const user = await this.prisma.user.update({

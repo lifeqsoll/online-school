@@ -4,12 +4,14 @@ import { MockPaymentProvider } from './mock-payment.provider';
 import { PAYMENT_PROVIDER } from './payment-provider';
 import { PaymentsController } from './payments.controller';
 import { PaymentsService } from './payments.service';
+import { RefundsService } from './refunds.service';
 
 @Module({
   imports: [ConfigModule],
   controllers: [PaymentsController],
   providers: [
     PaymentsService,
+    RefundsService,
     {
       provide: PAYMENT_PROVIDER,
       inject: [ConfigService],
@@ -24,6 +26,6 @@ import { PaymentsService } from './payments.service';
       },
     },
   ],
-  exports: [PaymentsService],
+  exports: [PaymentsService, RefundsService],
 })
 export class PaymentsModule {}

@@ -3,6 +3,7 @@ import {
   Button,
   Checkbox,
   Input,
+  Radio,
   Space,
   Spin,
   Typography,
@@ -21,6 +22,8 @@ type Question = {
   prompt: string;
   points: number;
   options?: { id: string; text: string }[] | null;
+  allowMultiple?: boolean;
+  maxAnswerLength?: number | null;
 };
 
 type Assignment = {
@@ -511,7 +514,16 @@ export function LkAssignmentPage() {
                 ? ' · не сохранено'
                 : ''}
           </Typography.Text>
-          <Typography.Paragraph strong style={{ fontSize: 16, marginTop: 8 }}>
+          <Typography.Paragraph
+            strong
+            style={{
+              fontSize: 16,
+              marginTop: 8,
+              maxWidth: '100%',
+              overflowWrap: 'anywhere',
+              wordBreak: 'break-word',
+            }}
+          >
             {current.prompt}
           </Typography.Paragraph>
 
@@ -530,6 +542,7 @@ export function LkAssignmentPage() {
               }
               placeholder="Ваш ответ"
               size="large"
+              maxLength={500}
             />
           ) : null}
           {current.type === 'OPEN' ? (
@@ -540,6 +553,8 @@ export function LkAssignmentPage() {
                 setAnswers((prev) => ({ ...prev, [current.id]: e.target.value }))
               }
               placeholder="Развёрнутый ответ"
+              maxLength={current.maxAnswerLength ?? 500}
+              showCount
             />
           ) : null}
         </div>
@@ -609,11 +624,32 @@ function ChoiceInput({
   onChange: (v: string[]) => void;
 }) {
   const options = normalizeOptions(question.options);
-  const selected = Array.isArray(value) ? (value as string[]) : value ? [String(value)] : [];
+  const selected = Array.isArray(value)
+    ? (value as string[])
+    : value
+      ? [String(value)]
+      : [];
+  const multi = !!question.allowMultiple;
 
   if (!options.length) {
     return (
       <Typography.Text type="secondary">Варианты ответа не заданы</Typography.Text>
+    );
+  }
+
+  if (!multi) {
+    return (
+      <Radio.Group
+        value={selected[0]}
+        onChange={(e) => onChange(e.target.value ? [String(e.target.value)] : [])}
+        style={{ display: 'flex', flexDirection: 'column', gap: 8 }}
+      >
+        {options.map((o) => (
+          <Radio key={o.id} value={o.id} style={{ whiteSpace: 'normal' }}>
+            {o.text}
+          </Radio>
+        ))}
+      </Radio.Group>
     );
   }
 
@@ -624,7 +660,7 @@ function ChoiceInput({
       style={{ display: 'flex', flexDirection: 'column', gap: 8 }}
     >
       {options.map((o) => (
-        <Checkbox key={o.id} value={o.id}>
+        <Checkbox key={o.id} value={o.id} style={{ whiteSpace: 'normal' }}>
           {o.text}
         </Checkbox>
       ))}

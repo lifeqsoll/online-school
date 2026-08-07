@@ -27,6 +27,7 @@ type Lesson = {
   videoUrl?: string | null;
   videoSource?: string | null;
   scheduledAt?: string | null;
+  endsAt?: string | null;
   meetingUrl?: string | null;
   contentUnlockDaysBefore?: number;
   contentUnlockedForAll?: boolean;
@@ -51,6 +52,7 @@ export function LessonEditPanel({
       content?: string;
       isPublished: boolean;
       scheduledAt: string | null;
+      endsAt: string | null;
       meetingUrl: string | null;
       contentUnlockDaysBefore: number;
     }) =>
@@ -88,6 +90,11 @@ export function LessonEditPanel({
           isPublished: lesson.isPublished,
           externalUrl: lesson.videoUrl ?? '',
           scheduledAt: lesson.scheduledAt ? dayjs(lesson.scheduledAt) : null,
+          endsAt: lesson.endsAt
+            ? dayjs(lesson.endsAt)
+            : lesson.scheduledAt
+              ? dayjs(lesson.scheduledAt).add(1, 'hour')
+              : null,
           meetingUrl: lesson.meetingUrl ?? '',
           contentUnlockDaysBefore: lesson.contentUnlockDaysBefore ?? 7,
         }}
@@ -100,6 +107,9 @@ export function LessonEditPanel({
               isPublished: v.isPublished,
               scheduledAt: v.scheduledAt
                 ? (v.scheduledAt as dayjs.Dayjs).toISOString()
+                : null,
+              endsAt: v.endsAt
+                ? (v.endsAt as dayjs.Dayjs).toISOString()
                 : null,
               meetingUrl: v.meetingUrl?.trim() ? v.meetingUrl.trim() : null,
               contentUnlockDaysBefore: Number(v.contentUnlockDaysBefore ?? 7),
@@ -140,13 +150,22 @@ export function LessonEditPanel({
           указана ссылка на встречу ниже. Текст / Видео / Смешанный — по
           содержимому урока.
         </Typography.Paragraph>
-        <Form.Item name="scheduledAt" label="Дата и время урока">
+        <Form.Item name="scheduledAt" label="Начало занятия">
           <DatePicker
             showTime
             format="DD.MM.YYYY HH:mm"
             style={{ width: '100%' }}
             allowClear
             placeholder="Без даты — только в программе курса"
+          />
+        </Form.Item>
+        <Form.Item name="endsAt" label="Конец занятия">
+          <DatePicker
+            showTime
+            format="DD.MM.YYYY HH:mm"
+            style={{ width: '100%' }}
+            allowClear
+            placeholder="По умолчанию +1 час от начала"
           />
         </Form.Item>
         <Form.Item

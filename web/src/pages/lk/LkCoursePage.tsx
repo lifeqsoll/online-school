@@ -8,7 +8,8 @@ import {
   DownOutlined,
 } from '@ant-design/icons';
 import dayjs from 'dayjs';
-import { useMemo, useState, type CSSProperties } from 'react';
+import isoWeek from 'dayjs/plugin/isoWeek';
+import { useCallback, useMemo, useState, type CSSProperties } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { AnimatePresence, motion } from 'framer-motion';
 import { api } from '../../shared/api/client';
@@ -22,6 +23,8 @@ import { easeOutExpo, tabPanelVariants } from '../../shared/motion';
 import { SupportPanel } from '../../features/support/SupportPanel';
 import { useClearSupportBadge } from '../../shared/notifications/useClearSupportBadge';
 import { useUnreadCounts } from '../../shared/notifications/NotificationsBell';
+
+dayjs.extend(isoWeek);
 
 type CourseDetail = {
   id: string;
@@ -72,8 +75,22 @@ export function LkCoursePage() {
   const unread = useUnreadCounts();
   useClearSupportBadge(tab === 'curator' ? 'COURSE' : undefined);
 
-  const from = dayjs().startOf('day').toISOString();
-  const to = dayjs().add(6, 'day').endOf('day').toISOString();
+  const defaultWeekRange = useCallback(() => {
+    const start = dayjs().startOf('isoWeek');
+    return {
+      from: start.startOf('day').toISOString(),
+      to: start.add(6, 'day').endOf('day').toISOString(),
+    };
+  }, []);
+  const [weekRange, setWeekRange] = useState(defaultWeekRange);
+  const onWeekRangeChange = useCallback(
+    (range: { from: string; to: string }) => {
+      setWeekRange((prev) =>
+        prev.from === range.from && prev.to === range.to ? prev : range,
+      );
+    },
+    [],
+  );
 
   const course = useQuery({
     queryKey: ['lk-course', courseId],
@@ -94,10 +111,15 @@ export function LkCoursePage() {
   });
 
   const cal = useQuery({
-    queryKey: ['course-events-student', courseId, from, to],
+    queryKey: [
+      'course-events-student',
+      courseId,
+      weekRange.from,
+      weekRange.to,
+    ],
     queryFn: () =>
       api<CalEvent[]>(
-        `/courses/${courseId}/events?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`,
+        `/courses/${courseId}/events?from=${encodeURIComponent(weekRange.from)}&to=${encodeURIComponent(weekRange.to)}`,
       ),
     enabled: !!courseId,
   });
@@ -167,7 +189,12 @@ export function LkCoursePage() {
         <Switch checked={hideSchedule} onChange={setHideSchedule} />
       </div>
 
-      {!hideSchedule ? <WeekStripCalendar events={cal.data ?? []} /> : null}
+      {!hideSchedule ? (
+        <WeekStripCalendar
+          events={Array.isArray(cal.data) ? cal.data : []}
+          onRangeChange={onWeekRangeChange}
+        />
+      ) : null}
 
       <div
         style={{

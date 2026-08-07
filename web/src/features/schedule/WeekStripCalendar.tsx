@@ -1,9 +1,9 @@
 import { Modal, Typography } from 'antd';
-import { LeftOutlined, RightOutlined } from '@ant-design/icons';
+import { CheckCircleFilled, LeftOutlined, RightOutlined } from '@ant-design/icons';
 import dayjs, { type Dayjs } from 'dayjs';
 import isoWeek from 'dayjs/plugin/isoWeek';
 import 'dayjs/locale/ru';
-import { useMemo, useState, type CSSProperties } from 'react';
+import { useEffect, useMemo, useState, type CSSProperties } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { AnimatePresence, motion } from 'framer-motion';
 import { easeOutExpo } from '../../shared/motion';
@@ -26,19 +26,32 @@ export type CalEvent = {
   lessonHasVideo?: boolean;
   assignmentId?: string | null;
   contentOpen?: boolean;
+  /** Standalone DEADLINE: student already submitted */
+  assignmentDone?: boolean;
   course?: { id: string; title: string };
+  /** HW linked to this lesson (LIVE events) */
+  linkedAssignments?: Array<{ id: string; title: string; done?: boolean }>;
 };
 
 type Props = {
   events: CalEvent[];
   loading?: boolean;
+  /** Called when visible week/month range changes (ISO strings) */
+  onRangeChange?: (range: { from: string; to: string }) => void;
 };
 
 const WEEKDAYS = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'];
 
-function eventsOnDay(events: CalEvent[], day: Dayjs) {
+/** Lesson-linked HW lives inside the lesson modal — hide separate deadline chips. */
+function visibleDayEvents(events: CalEvent[]) {
   const list = Array.isArray(events) ? events : [];
-  return list.filter((e) => dayjs(e.startsAt).isSame(day, 'day'));
+  return list.filter((e) => !(e.type === 'DEADLINE' && e.lessonId));
+}
+
+function eventsOnDay(events: CalEvent[], day: Dayjs) {
+  return visibleDayEvents(events).filter((e) =>
+    dayjs(e.startsAt).isSame(day, 'day'),
+  );
 }
 
 function EventChip({
@@ -49,6 +62,7 @@ function EventChip({
   onClick: () => void;
 }) {
   const isLive = event.type === 'LIVE';
+  const hwCount = event.linkedAssignments?.length ?? 0;
   const colors = event.course?.id
     ? courseColor(event.course.id)
     : {
@@ -81,6 +95,8 @@ function EventChip({
     >
       <div style={{ fontWeight: 600 }}>
         {dayjs(event.startsAt).format('HH:mm')} · {isLive ? 'Урок' : 'Дедлайн'}
+        {hwCount > 0 ? ` · ДЗ` : ''}
+        {!isLive && event.assignmentDone ? ' ✓' : ''}
       </div>
       <div
         style={{
@@ -108,6 +124,7 @@ function EventModal({
   const navigate = useNavigate();
   if (!event) return null;
   const isLive = event.type === 'LIVE';
+  const linked = event.linkedAssignments ?? [];
 
   return (
     <Modal
@@ -122,12 +139,27 @@ function EventModal({
       </Typography.Title>
       {event.course && (
         <Typography.Paragraph type="secondary" style={{ marginBottom: 8 }}>
-          Курс: {event.course.title}
+          Курс:{' '}
+          <a
+            href={`/lk/courses/${event.course.id}`}
+            onClick={(e) => {
+              e.preventDefault();
+              onClose();
+              navigate(`/lk/courses/${event.course!.id}`);
+            }}
+          >
+            {event.course.title}
+          </a>
         </Typography.Paragraph>
       )}
       <Typography.Paragraph>
         {dayjs(event.startsAt).format('D MMMM YYYY, HH:mm')}
         {event.endsAt ? ` — ${dayjs(event.endsAt).format('HH:mm')}` : ''}
+        {!isLive && event.assignmentDone ? (
+          <span style={{ marginLeft: 10, color: '#52c41a' }}>
+            <CheckCircleFilled /> Сдано
+          </span>
+        ) : null}
       </Typography.Paragraph>
       {isLive && event.meetingUrl && event.contentOpen !== false && (
         <a href={event.meetingUrl} target="_blank" rel="noreferrer">
@@ -140,7 +172,7 @@ function EventModal({
         </Typography.Paragraph>
       ) : null}
       <div style={{ marginTop: 16, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-        {isLive && event.lessonId && event.course && (
+        {isLive && event.lessonId && (
           <motion.button
             type="button"
             whileHover={{ scale: 1.03 }}
@@ -154,6 +186,25 @@ function EventModal({
             Перейти к уроку
           </motion.button>
         )}
+        {event.course && (
+          <motion.button
+            type="button"
+            whileHover={{ scale: 1.03 }}
+            whileTap={{ scale: 0.97 }}
+            onClick={() => {
+              onClose();
+              navigate(`/lk/courses/${event.course!.id}`);
+            }}
+            style={{
+              ...primaryBtn,
+              background: '#fff',
+              color: 'var(--fg)',
+              border: '1px solid var(--border)',
+            }}
+          >
+            К курсу
+          </motion.button>
+        )}
         {!isLive && event.assignmentId && event.course && (
           <motion.button
             type="button"
@@ -161,9 +212,7 @@ function EventModal({
             whileTap={{ scale: 0.97 }}
             onClick={() => {
               onClose();
-              navigate(
-                `/lk/courses/${event.course!.id}?tab=homework&assignmentId=${event.assignmentId}`,
-              );
+              navigate(`/lk/assignments/${event.assignmentId}`);
             }}
             style={primaryBtn}
           >
@@ -171,6 +220,47 @@ function EventModal({
           </motion.button>
         )}
       </div>
+
+      {isLive && linked.length > 0 ? (
+        <div style={{ marginTop: 20 }}>
+          <Typography.Title level={5} style={{ marginBottom: 8 }}>
+            Домашнее задание
+          </Typography.Title>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {linked.map((a) => (
+              <motion.button
+                key={a.id}
+                type="button"
+                whileHover={{ scale: 1.01, x: 2 }}
+                whileTap={{ scale: 0.98 }}
+                onClick={() => {
+                  onClose();
+                  navigate(`/lk/assignments/${a.id}`);
+                }}
+                style={{
+                  ...primaryBtn,
+                  background: a.done ? '#f6ffed' : '#fff7e6',
+                  color: 'var(--fg)',
+                  border: `1px solid ${a.done ? '#b7eb8f' : '#ffe58f'}`,
+                  textAlign: 'left',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  gap: 8,
+                }}
+              >
+                <span>ДЗ: {a.title}</span>
+                {a.done ? (
+                  <span style={{ color: '#52c41a', flexShrink: 0 }}>
+                    <CheckCircleFilled /> Сдано
+                  </span>
+                ) : null}
+              </motion.button>
+            ))}
+          </div>
+        </div>
+      ) : null}
+
       <Typography.Title level={5} style={{ marginTop: 20, marginBottom: 8 }}>
         Материалы
       </Typography.Title>
@@ -205,7 +295,7 @@ const navBtn: CSSProperties = {
   justifyContent: 'center',
 };
 
-export function WeekStripCalendar({ events }: Props) {
+export function WeekStripCalendar({ events, onRangeChange }: Props) {
   const safeEvents = Array.isArray(events) ? events : [];
   const [anchor, setAnchor] = useState(() => dayjs());
   const [selected, setSelected] = useState<CalEvent | null>(null);
@@ -216,6 +306,13 @@ export function WeekStripCalendar({ events }: Props) {
     () => Array.from({ length: 7 }, (_, i) => weekStart.add(i, 'day')),
     [weekStart],
   );
+
+  useEffect(() => {
+    onRangeChange?.({
+      from: weekStart.startOf('day').toISOString(),
+      to: weekStart.add(6, 'day').endOf('day').toISOString(),
+    });
+  }, [weekStart, onRangeChange]);
 
   const shiftWeek = (delta: number) => {
     setDir(delta);
@@ -308,7 +405,7 @@ export function WeekStripCalendar({ events }: Props) {
   );
 }
 
-export function MonthGridCalendar({ events }: Props) {
+export function MonthGridCalendar({ events, onRangeChange }: Props) {
   const safeEvents = Array.isArray(events) ? events : [];
   const [anchor, setAnchor] = useState(() => dayjs());
   const [selected, setSelected] = useState<CalEvent | null>(null);
@@ -320,6 +417,13 @@ export function MonthGridCalendar({ events }: Props) {
     () => Array.from({ length: 42 }, (_, i) => gridStart.add(i, 'day')),
     [gridStart],
   );
+
+  useEffect(() => {
+    onRangeChange?.({
+      from: gridStart.startOf('day').toISOString(),
+      to: gridStart.add(41, 'day').endOf('day').toISOString(),
+    });
+  }, [gridStart, onRangeChange]);
 
   const shiftMonth = (delta: number) => {
     setDir(delta);

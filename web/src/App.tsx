@@ -7,7 +7,7 @@ import { api } from './shared/api/client';
 import { LoginPage } from './pages/LoginPage';
 import { ForgotPasswordPage } from './pages/ForgotPasswordPage';
 import { ResetPasswordPage } from './pages/ResetPasswordPage';
-import { StaffShell, adminMenu, curatorMenu } from './shared/layout/StaffShell';
+import { StaffShell, adminMenu, curatorMenu, supportMenu } from './shared/layout/StaffShell';
 import { PublicShell } from './shared/layout/PublicShell';
 import { StudentShell } from './shared/layout/StudentShell';
 import { DashboardPage } from './pages/DashboardPage';
@@ -32,7 +32,15 @@ import {
   LkCourseSupportPage,
   LkTechSupportPage,
   StaffSupportInboxPage,
+  AdminSupportInboxPage,
 } from './pages/lk/LkSupportPages';
+import { StaffReviewsPage } from './pages/staff/StaffReviewsPage';
+import { StaffEmployeesPage } from './pages/staff/StaffEmployeesPage';
+import {
+  SupportInboxPage,
+  SupportStudentPage,
+  SupportUsersPage,
+} from './pages/support/SupportPages';
 import type { ReactNode } from 'react';
 
 const qc = new QueryClient();
@@ -51,7 +59,7 @@ function Guard({
   role,
 }: {
   children: ReactNode;
-  role: 'ADMIN' | 'STAFF';
+  role: 'ADMIN' | 'STAFF' | 'SUPPORT';
 }) {
   const { user, loading } = useAuth();
   const managed = useQuery({
@@ -66,15 +74,27 @@ function Guard({
 
   if (role === 'ADMIN') {
     if (user.globalRole !== 'ADMIN') {
-      // Never dump students into curator panel
+      if (user.globalRole === 'SUPPORT') {
+        return <Navigate to="/support" replace />;
+      }
       return <Navigate to="/lk" replace />;
     }
     return children;
   }
 
+  if (role === 'SUPPORT') {
+    if (user.globalRole === 'ADMIN' || user.globalRole === 'SUPPORT') {
+      return children;
+    }
+    return <Navigate to="/lk" replace />;
+  }
+
   // Curator panel: only real curators (or admins peeking)
   if (user.globalRole === 'ADMIN') {
     return children;
+  }
+  if (user.globalRole === 'SUPPORT') {
+    return <Navigate to="/support" replace />;
   }
   if (managed.isLoading) return <Spin fullscreen />;
   if (!(managed.data?.length)) {
@@ -164,12 +184,28 @@ function AppRoutes() {
           }
         />
         <Route path="users" element={<UsersPage />} />
-        <Route
-          path="support"
-          element={
-            <StaffSupportInboxPage channel="TECH" title="Техподдержка" />
-          }
-        />
+        <Route path="employees" element={<StaffEmployeesPage />} />
+        <Route path="support" element={<AdminSupportInboxPage />} />
+        <Route path="reviews" element={<StaffReviewsPage />} />
+        <Route path="profile" element={<LkProfilePage />} />
+      </Route>
+
+      <Route
+        path="/support"
+        element={
+          <Guard role="SUPPORT">
+            <StaffShell
+              base="/support"
+              items={supportMenu('/support')}
+              roleLabel="Поддержка"
+            />
+          </Guard>
+        }
+      >
+        <Route index element={<Navigate to="/support/inbox" replace />} />
+        <Route path="inbox" element={<SupportInboxPage />} />
+        <Route path="users" element={<SupportUsersPage />} />
+        <Route path="users/:id" element={<SupportStudentPage />} />
         <Route path="profile" element={<LkProfilePage />} />
       </Route>
 
@@ -247,6 +283,7 @@ function AppRoutes() {
             />
           }
         />
+        <Route path="reviews" element={<StaffReviewsPage />} />
         <Route path="profile" element={<LkProfilePage />} />
       </Route>
 

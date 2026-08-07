@@ -59,6 +59,10 @@ function kindLabel(kind: string) {
       return 'ДЗ';
     case 'HW_SUBMITTED':
       return 'Проверка';
+    case 'REVIEW_REQUEST':
+      return 'Отзыв';
+    case 'REVIEW_PENDING':
+      return 'Модерация';
     case 'REMINDER':
       return 'Напоминание';
     case 'SUPPORT_REPLY':
@@ -92,12 +96,20 @@ export function NotificationsBell() {
   });
 
   const canOpenAdmin = user?.globalRole === 'ADMIN';
+  const canOpenSupport =
+    user?.globalRole === 'ADMIN' || user?.globalRole === 'SUPPORT';
   const canOpenCurator =
     user?.globalRole === 'ADMIN' || (managed.data?.length ?? 0) > 0;
 
   const resolveLink = (linkUrl?: string | null) => {
     if (!linkUrl) return null;
     if (linkUrl.startsWith('/admin') && !canOpenAdmin) {
+      if (canOpenSupport && linkUrl.includes('support')) {
+        return '/support/inbox';
+      }
+      return '/lk/support/tech';
+    }
+    if (linkUrl.startsWith('/support') && !canOpenSupport) {
       return '/lk/support/tech';
     }
     if (linkUrl.startsWith('/curator') && !canOpenCurator) {
@@ -145,7 +157,10 @@ export function NotificationsBell() {
     const unreadToasts = (list.data ?? []).filter((n) => {
       if (n.channel !== 'TOAST' || n.readAt) return false;
       // Hide staff routes from users who cannot open them
-      if (n.linkUrl?.startsWith('/admin') && !canOpenAdmin) return false;
+      if (n.linkUrl?.startsWith('/admin') && !canOpenAdmin) {
+        if (!(canOpenSupport && n.linkUrl.includes('support'))) return false;
+      }
+      if (n.linkUrl?.startsWith('/support') && !canOpenSupport) return false;
       if (n.linkUrl?.startsWith('/curator') && !canOpenCurator) return false;
       return true;
     });
@@ -173,13 +188,13 @@ export function NotificationsBell() {
         setToasts((prev) => prev.filter((t) => t.id !== n.id));
       }, 7000);
       // Keep staff action toasts unread until opened (support + HW review)
-      if (n.kind !== 'SUPPORT_REPLY' && n.kind !== 'HW_SUBMITTED') {
+      if (n.kind !== 'SUPPORT_REPLY' && n.kind !== 'HW_SUBMITTED' && n.kind !== 'REVIEW_PENDING' && n.kind !== 'REVIEW_REQUEST') {
         void markRead.mutateAsync(n.id).catch(() => undefined);
       }
     }
     // Re-run when staff access flags resolve (managed courses load)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [list.data, canOpenAdmin, canOpenCurator]);
+  }, [list.data, canOpenAdmin, canOpenCurator, canOpenSupport]);
 
   const dismissToast = (id: string) => {
     setToasts((prev) => prev.filter((t) => t.id !== id));

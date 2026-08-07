@@ -59,6 +59,23 @@ export function assertCourseMaterial(mime: string, size: number): void {
   }
 }
 
+export function assertSupportAttachment(mime: string, size: number): void {
+  const isImage = IMAGE_MIMES.has(mime);
+  const isVideo = VIDEO_MIMES.has(mime);
+  const isDoc = COURSE_DOC_MIMES.has(mime);
+  if (!isImage && !isVideo && !isDoc) {
+    throw new Error(
+      'Allowed: PNG, JPEG, WebP, PDF, DOC/DOCX, PPT/PPTX, TXT, MP4, WebM, MOV',
+    );
+  }
+  if (isVideo && size > MAX_VIDEO_BYTES) {
+    throw new Error('Video exceeds 200 MB limit');
+  }
+  if ((isImage || isDoc) && size > MAX_PNG_PDF_BYTES) {
+    throw new Error('File exceeds 20 MB limit');
+  }
+}
+
 /** Multer often gives UTF-8 filenames decoded as latin1 (кириллица → ÐºÐ¸...). */
 export function decodeUploadFilename(name: string): string {
   if (!name) return 'file';

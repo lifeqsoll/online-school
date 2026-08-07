@@ -11,15 +11,19 @@ import {
   MenuFoldOutlined,
   MenuUnfoldOutlined,
   CustomerServiceOutlined,
+  StarOutlined,
+  SearchOutlined,
 } from '@ant-design/icons';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../shared/auth/AuthContext';
 import { useEffect, useState, type ReactNode } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { AnimatedOutlet } from './AnimatedOutlet';
 import {
   NotificationsBell,
   useUnreadCounts,
 } from '../notifications/NotificationsBell';
+import { api } from '../api/client';
 
 const { Header, Sider, Content } = Layout;
 
@@ -32,7 +36,7 @@ export function StaffShell({
   items,
   roleLabel,
 }: {
-  base: '/admin' | '/curator';
+  base: '/admin' | '/curator' | '/support';
   items: Item[];
   roleLabel: string;
 }) {
@@ -40,10 +44,19 @@ export function StaffShell({
   const nav = useNavigate();
   const { user, logout } = useAuth();
   const unread = useUnreadCounts();
+  const pendingReviews = useQuery({
+    queryKey: ['reviews-pending-count'],
+    queryFn: () => api<{ count: number }>('/reviews/pending-count'),
+    refetchInterval: 20_000,
+    enabled: base === '/admin' || base === '/curator',
+  });
   const supportBadge =
     base === '/admin'
-      ? (unread.data?.staffTech ?? 0)
-      : (unread.data?.staffCourse ?? 0);
+      ? (unread.data?.staffTech ?? 0) + (unread.data?.staffCourse ?? 0)
+      : base === '/support'
+        ? (unread.data?.staffTech ?? 0)
+        : (unread.data?.staffCourse ?? 0);
+  const reviewsBadge = pendingReviews.data?.count ?? 0;
 
   const [open, setOpen] = useState(() => {
     const saved = localStorage.getItem(SIDEBAR_KEY);
@@ -64,7 +77,12 @@ export function StaffShell({
 
   const menuItems = items.map((i) => {
     const isSupport = i.key.endsWith('/support');
-    const badge = isSupport ? supportBadge : (i.badge ?? 0);
+    const isReviews = i.key.endsWith('/reviews');
+    const badge = isSupport
+      ? supportBadge
+      : isReviews
+        ? reviewsBadge
+        : (i.badge ?? 0);
     return {
       key: i.key,
       icon: (
@@ -226,9 +244,19 @@ export const adminMenu = (base: '/admin'): Item[] => [
   {
     key: `${base}/support`,
     icon: <CustomerServiceOutlined />,
-    label: 'Техподдержка',
+    label: 'Поддержка',
+  },
+  {
+    key: `${base}/reviews`,
+    icon: <StarOutlined />,
+    label: 'Отзывы',
   },
   { key: `${base}/users`, icon: <UserOutlined />, label: 'Пользователи' },
+  {
+    key: `${base}/employees`,
+    icon: <TeamOutlined />,
+    label: 'Сотрудники',
+  },
 ];
 
 export const curatorMenu = (base: '/curator'): Item[] => [
@@ -242,5 +270,23 @@ export const curatorMenu = (base: '/curator'): Item[] => [
     key: `${base}/support`,
     icon: <CustomerServiceOutlined />,
     label: 'Поддержка курса',
+  },
+  {
+    key: `${base}/reviews`,
+    icon: <StarOutlined />,
+    label: 'Отзывы',
+  },
+];
+
+export const supportMenu = (base: '/support'): Item[] => [
+  {
+    key: `${base}/inbox`,
+    icon: <CustomerServiceOutlined />,
+    label: 'Техподдержка',
+  },
+  {
+    key: `${base}/users`,
+    icon: <SearchOutlined />,
+    label: 'Ученики',
   },
 ];

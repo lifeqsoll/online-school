@@ -14,6 +14,7 @@ import {
   SubmissionStatus,
 } from '@prisma/client';
 import { AuditService } from '../audit/audit.service';
+import { CryptoService } from '../common/crypto/crypto.service';
 import { CourseAccessService } from '../enrollments/course-access.service';
 import {
   computeScoreXp,
@@ -41,6 +42,7 @@ export class SubmissionsService {
     private readonly mastery: TopicMasteryService,
     private readonly audit: AuditService,
     private readonly notifications: NotificationsService,
+    private readonly crypto: CryptoService,
   ) {}
 
   async createAttempt(user: AuthUser, assignmentId: string) {
@@ -121,18 +123,34 @@ export class SubmissionsService {
       throw new BadRequestException('Submission is not editable');
     }
 
-    const questionIds = new Set(
-      (
-        await this.prisma.question.findMany({
-          where: { assignmentId: submission.assignmentId },
-          select: { id: true },
-        })
-      ).map((q) => q.id),
-    );
+    const questions = await this.prisma.question.findMany({
+      where: { assignmentId: submission.assignmentId },
+    });
+    const byId = new Map(questions.map((q) => [q.id, q]));
 
     for (const a of dto.answers) {
-      if (!questionIds.has(a.questionId)) {
+      const q = byId.get(a.questionId);
+      if (!q) {
         throw new BadRequestException(`Unknown question ${a.questionId}`);
+      }
+      if (q.type === QuestionType.OPEN) {
+        const text = String(a.value ?? '');
+        const max = q.maxAnswerLength ?? 500;
+        if (text.length > max) {
+          throw new BadRequestException(
+            `Ответ слишком длинный (макс. ${max} символов)`,
+          );
+        }
+      }
+      if (q.type === QuestionType.CHOICE && !q.allowMultiple) {
+        const selected = Array.isArray(a.value)
+          ? (a.value as string[])
+          : a.value
+            ? [String(a.value)]
+            : [];
+        if (selected.length > 1) {
+          throw new BadRequestException('Допустим только один вариант ответа');
+        }
       }
       await this.prisma.answer.upsert({
         where: {
@@ -353,7 +371,15 @@ export class SubmissionsService {
       include: {
         answers: true,
         assignment: { select: { id: true, title: true, responseMode: true, maxXp: true } },
-        user: { select: { id: true } },
+        user: {
+          select: {
+            id: true,
+            nickname: true,
+            firstNameEnc: true,
+            lastNameEnc: true,
+            emailEnc: true,
+          },
+        },
       },
       orderBy: { createdAt: 'desc' },
     }).then(async (rows) => {
@@ -379,10 +405,34 @@ export class SubmissionsService {
         list.push(f);
         bySub.set(f.ownerId, list);
       }
-      return rows.map((r) => ({
-        ...r,
-        files: (bySub.get(r.id) ?? []).map(({ ownerId: _, ...rest }) => rest),
-      }));
+      return rows.map((r) => {
+        let displayName = r.user.nickname?.trim() || '';
+        if (!displayName) {
+          try {
+            const first = r.user.firstNameEnc
+              ? this.crypto.decrypt(r.user.firstNameEnc)
+              : '';
+            const last = r.user.lastNameEnc
+              ? this.crypto.decrypt(r.user.lastNameEnc)
+              : '';
+            displayName = `${first} ${last}`.trim();
+          } catch {
+            displayName = '';
+          }
+        }
+        if (!displayName) {
+          try {
+            displayName = this.crypto.decrypt(r.user.emailEnc);
+          } catch {
+            displayName = r.userId;
+          }
+        }
+        return {
+          ...r,
+          displayName,
+          files: (bySub.get(r.id) ?? []).map(({ ownerId: _, ...rest }) => rest),
+        };
+      });
     });
   }
 

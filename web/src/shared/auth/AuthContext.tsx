@@ -10,8 +10,11 @@ export type AuthUser = {
   bio?: string | null;
   avatarUrl?: string | null;
   pendingEmail?: string | null;
-  globalRole: 'ADMIN' | 'STUDENT';
+  globalRole: 'ADMIN' | 'STUDENT' | 'SUPPORT';
   notifyHwSubmitted?: boolean;
+  notifyCourseReviews?: boolean;
+  notifySupportTech?: boolean;
+  notifySupportCourse?: boolean;
   impersonation?: unknown;
 };
 

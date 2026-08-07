@@ -53,6 +53,7 @@ type CourseDetail = {
       videoUrl?: string | null;
       videoSource?: string | null;
       scheduledAt?: string | null;
+      endsAt?: string | null;
       meetingUrl?: string | null;
       contentUnlockDaysBefore?: number;
       contentUnlockedForAll?: boolean;

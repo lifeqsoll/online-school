@@ -8,6 +8,7 @@ import {
 import {
   AssignmentScope,
   AuditAction,
+  CourseEventType,
   Prisma,
   QuestionType,
 } from '@prisma/client';
@@ -54,6 +55,8 @@ export class AssignmentsService {
       },
       include: { questions: { orderBy: { sortOrder: 'asc' } } },
     });
+
+    await this.syncDeadlineEvent(assignment.id);
 
     await this.audit.append({
       actorId: actor.realUserId,
@@ -118,6 +121,8 @@ export class AssignmentsService {
       include: { questions: { orderBy: { sortOrder: 'asc' } } },
     });
 
+    await this.syncDeadlineEvent(id);
+
     await this.audit.append({
       actorId: actor.realUserId,
       action: AuditAction.ASSIGNMENT_UPDATE,
@@ -131,6 +136,9 @@ export class AssignmentsService {
     const existing = await this.prisma.assignment.findUnique({ where: { id } });
     if (!existing) throw new NotFoundException('Assignment not found');
     await this.requireManage(actor, existing.courseId);
+    await this.prisma.courseEvent.deleteMany({
+      where: { assignmentId: id, type: CourseEventType.DEADLINE },
+    });
     await this.prisma.assignment.delete({ where: { id } });
     await this.audit.append({
       actorId: actor.realUserId,
@@ -182,13 +190,32 @@ export class AssignmentsService {
     if (q.type === QuestionType.SHORT && !q.correctKeys?.length) {
       throw new BadRequestException('SHORT requires correctKeys');
     }
+
+    let correctKeys = q.correctKeys ?? null;
+    const allowMultiple = q.allowMultiple === true;
+    if (q.type === QuestionType.CHOICE && correctKeys && !allowMultiple) {
+      correctKeys = correctKeys.slice(0, 1);
+    }
+
+    const defaultPoints =
+      q.type === QuestionType.CHOICE
+        ? 1
+        : q.type === QuestionType.SHORT
+          ? 3
+          : 5;
+
     return {
       type: q.type,
       prompt: q.prompt,
       sortOrder: q.sortOrder ?? index,
-      points: q.points ?? 1,
+      points: q.points ?? defaultPoints,
       options: q.options ?? Prisma.JsonNull,
-      correctKeys: q.correctKeys ?? Prisma.JsonNull,
+      correctKeys: correctKeys ?? Prisma.JsonNull,
+      allowMultiple: q.type === QuestionType.CHOICE ? allowMultiple : false,
+      maxAnswerLength:
+        q.type === QuestionType.OPEN
+          ? q.maxAnswerLength ?? 500
+          : null,
       shortMatch: q.shortMatch,
       numberTolerance:
         q.numberTolerance !== undefined
@@ -239,6 +266,78 @@ export class AssignmentsService {
     if (!(await this.access.canManageCourse(actor, courseId))) {
       throw new ForbiddenException();
     }
+  }
+
+  /** Lesson-linked (or dueAt) HW → DEADLINE calendar event */
+  private async syncDeadlineEvent(assignmentId: string) {
+    const assignment = await this.prisma.assignment.findUnique({
+      where: { id: assignmentId },
+      include: {
+        lesson: { select: { id: true, scheduledAt: true, title: true } },
+      },
+    });
+    if (!assignment) return;
+
+    const existing = await this.prisma.courseEvent.findFirst({
+      where: { assignmentId, type: CourseEventType.DEADLINE },
+      orderBy: { createdAt: 'asc' },
+    });
+
+    const startsAt =
+      assignment.dueAt ??
+      (assignment.lessonId ? assignment.lesson?.scheduledAt ?? null : null);
+
+    if (!startsAt) {
+      if (existing) {
+        await this.prisma.courseEvent.delete({ where: { id: existing.id } });
+      }
+      return;
+    }
+
+    // Prefer any staff user on course as creator; fall back to first membership
+    let createdById = existing?.createdById;
+    if (!createdById) {
+      const curator = await this.prisma.courseMembership.findFirst({
+        where: { courseId: assignment.courseId },
+        select: { userId: true },
+      });
+      if (!curator) {
+        const admin = await this.prisma.user.findFirst({
+          where: { globalRole: 'ADMIN', isActive: true },
+          select: { id: true },
+        });
+        createdById = admin?.id;
+      } else {
+        createdById = curator.userId;
+      }
+    }
+    if (!createdById) return;
+
+    const title = `ДЗ: ${assignment.title}`;
+    const data = {
+      title,
+      startsAt,
+      endsAt: startsAt,
+      type: CourseEventType.DEADLINE,
+      assignmentId: assignment.id,
+      lessonId: assignment.lessonId,
+    };
+
+    if (existing) {
+      await this.prisma.courseEvent.update({
+        where: { id: existing.id },
+        data,
+      });
+      return;
+    }
+
+    await this.prisma.courseEvent.create({
+      data: {
+        courseId: assignment.courseId,
+        createdById,
+        ...data,
+      },
+    });
   }
 
   private present(

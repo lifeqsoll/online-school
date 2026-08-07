@@ -150,7 +150,7 @@ export function LandingPage() {
                     fontWeight: 600,
                   }}
                 >
-                  Смотреть каталог
+                  Каталог
                 </Button>
               </motion.div>
               <motion.div whileHover={{ scale: 1.04, y: -2 }} whileTap={{ scale: 0.97 }}>
@@ -169,22 +169,6 @@ export function LandingPage() {
                   {user ? 'В кабинет' : 'Войти'}
                 </Button>
               </motion.div>
-              {!user ? (
-                <motion.div whileHover={{ scale: 1.04, y: -2 }} whileTap={{ scale: 0.97 }}>
-                  <Button
-                    size="large"
-                    type="link"
-                    onClick={() => nav('/login?tab=register')}
-                    style={{
-                      height: 48,
-                      fontWeight: 600,
-                      color: '#6b4fb8',
-                    }}
-                  >
-                    Регистрация
-                  </Button>
-                </motion.div>
-              ) : null}
             </Space>
           </motion.div>
         </motion.div>

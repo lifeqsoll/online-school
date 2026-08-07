@@ -7,6 +7,10 @@ import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
 import { api, getAccessToken } from '../../shared/api/client';
 import { easeOutExpo, fadeUp, stagger } from '../../shared/motion';
 import { courseColor } from '../../shared/schedule/courseColor';
+import {
+  CourseRatingBadge,
+  CourseReviewsModal,
+} from '../../shared/reviews/CourseReviewsModal';
 
 type Course = {
   id: string;
@@ -15,10 +19,13 @@ type Course = {
   priceCents: number;
   isPublished: boolean;
   coverUrl?: string | null;
+  ratingAvg?: number;
+  ratingCount?: number;
 };
 
 export function CatalogPage() {
   const [freeOnly, setFreeOnly] = useState(false);
+  const [reviewsFor, setReviewsFor] = useState<Course | null>(null);
   const reduce = useReducedMotion();
   const q = useQuery({
     queryKey: ['courses', 'public'],
@@ -239,26 +246,41 @@ export function CatalogPage() {
                         >
                           {c.description || 'Описание скоро появится'}
                         </Typography.Paragraph>
-                        <Link to={`/courses/${c.id}`} style={{ alignSelf: 'flex-start' }}>
-                          <motion.div whileHover={{ x: 3 }} whileTap={{ scale: 0.98 }}>
-                            <Button
-                              type="primary"
-                              style={{
-                                borderRadius: 10,
-                                fontWeight: 600,
-                                ...(hasCover
-                                  ? {
-                                      background: 'rgba(255,255,255,0.95)',
-                                      color: '#3d2a7a',
-                                      borderColor: 'transparent',
-                                    }
-                                  : {}),
-                              }}
-                            >
-                              Подробнее <ArrowRightOutlined />
-                            </Button>
-                          </motion.div>
-                        </Link>
+                        <div
+                          style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: 12,
+                            flexWrap: 'wrap',
+                          }}
+                        >
+                          <Link to={`/courses/${c.id}`} style={{ alignSelf: 'flex-start' }}>
+                            <motion.div whileHover={{ x: 3 }} whileTap={{ scale: 0.98 }}>
+                              <Button
+                                type="primary"
+                                style={{
+                                  borderRadius: 10,
+                                  fontWeight: 600,
+                                  ...(hasCover
+                                    ? {
+                                        background: 'rgba(255,255,255,0.95)',
+                                        color: '#3d2a7a',
+                                        borderColor: 'transparent',
+                                      }
+                                    : {}),
+                                }}
+                              >
+                                Подробнее <ArrowRightOutlined />
+                              </Button>
+                            </motion.div>
+                          </Link>
+                          <CourseRatingBadge
+                            avg={c.ratingAvg}
+                            count={c.ratingCount}
+                            light={hasCover}
+                            onClick={() => setReviewsFor(c)}
+                          />
+                        </div>
                       </div>
                     </motion.div>
                   );
@@ -268,6 +290,13 @@ export function CatalogPage() {
           )}
         </motion.div>
       </div>
+
+      <CourseReviewsModal
+        courseId={reviewsFor?.id ?? ''}
+        courseTitle={reviewsFor?.title}
+        open={!!reviewsFor}
+        onClose={() => setReviewsFor(null)}
+      />
     </div>
   );
 }
